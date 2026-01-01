@@ -1,213 +1,722 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Baby Ballance</title>
-<style>
-body {
-    font-family: Arial, sans-serif;
-    background: #f4f6fb;
-    padding: 20px;
-}
-h1 {
-    text-align: center;
-}
-.section {
-    background: white;
-    padding: 15px;
-    margin-bottom: 20px;
-    border-radius: 8px;
-}
-input, select, button {
-    padding: 6px;
-    margin: 4px;
-}
-button {
-    cursor: pointer;
-}
-.babyCard {
-    border: 1px solid #ccc;
-    padding: 10px;
-    border-radius: 6px;
-    margin-top: 10px;
-}
-.badMode {
-    color: red;
-    font-weight: bold;
-}
-.goodMode {
-    color: green;
-    font-weight: bold;
-}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Baby Balance</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts: Inter for Clean/Minimal Look -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+            color: #334155; /* Slate 700 */
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* --- Living Background --- */
+        .ambient-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: -50;
+            background: linear-gradient(135deg, #eef2f3 0%, #e0e7ec 100%);
+            overflow: hidden;
+        }
+
+        .blob {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(60px);
+            opacity: 0.5;
+            animation: float 25s infinite alternate ease-in-out;
+        }
+
+        .blob-1 { top: -10%; left: -10%; width: 50vw; height: 50vw; background: rgba(255, 255, 255, 0.8); animation-duration: 25s; }
+        .blob-2 { bottom: -10%; right: -10%; width: 60vw; height: 60vw; background: rgba(220, 225, 230, 0.6); animation-duration: 30s; animation-direction: alternate-reverse; }
+        .blob-3 { top: 40%; left: 40%; width: 40vw; height: 40vw; background: rgba(255, 255, 255, 0.6); animation-duration: 35s; }
+
+        @keyframes float {
+            0% { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(30px, -30px) scale(1.05); }
+        }
+
+        /* --- Glassmorphism Utilities --- */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.35);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+        }
+
+        .glass-input {
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            color: #334155;
+            transition: all 0.2s ease;
+        }
+        .glass-input:focus {
+            background: rgba(255, 255, 255, 0.5);
+            outline: none;
+            border-color: rgba(255, 255, 255, 0.9);
+            box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
+        }
+
+        /* Glass Buttons (Slabs) */
+        .glass-btn {
+            background: rgba(255, 255, 255, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            backdrop-filter: blur(4px);
+            color: #475569;
+            transition: all 0.2s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .glass-btn:hover {
+            background: rgba(255, 255, 255, 0.55);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            color: #1e293b;
+        }
+        .glass-btn:active {
+            transform: translateY(0);
+            background: rgba(255, 255, 255, 0.7);
+        }
+        .glass-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Special States (Glass versions) */
+        .glass-bad-active {
+            background: rgba(254, 226, 226, 0.3); /* Red tint */
+            border-color: rgba(254, 202, 202, 0.4);
+        }
+
+        /* --- Scrollbar --- */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.2); }
+
+        /* --- Animations --- */
+        .fade-in { animation: fadeIn 0.4s ease-out forwards; opacity: 0; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+    </style>
 </head>
-<body>
+<body class="min-h-screen flex flex-col text-slate-700">
 
-<h1>Baby Ballance</h1>
+    <!-- Ambient Background -->
+    <div class="ambient-bg">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
 
-<div class="section">
-<h2>Add Baby</h2>
-<input id="babyName" placeholder="Baby name">
-<button onclick="addBaby()">Add Baby</button>
-</div>
+    <!-- Navbar -->
+    <nav class="sticky top-0 z-40 glass-panel border-b-0 border-b border-white/40 mb-6">
+        <div class="max-w-4xl mx-auto px-6 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <!-- Icon: No background, just the icon -->
+                <i data-lucide="baby" class="w-6 h-6 text-slate-600"></i>
+                <h1 class="text-xl font-semibold tracking-tight text-slate-700">Baby Balance</h1>
+            </div>
+            <button onclick="openSettings()" class="glass-btn p-2 rounded-full">
+                <i data-lucide="settings" class="w-5 h-5"></i>
+            </button>
+        </div>
+    </nav>
 
-<div class="section">
-<h2>Add Store Item</h2>
-<input id="itemName" placeholder="Item name">
-<input id="itemIcon" placeholder="Icon name">
-<input id="itemCost" type="number" placeholder="Cost">
-<button onclick="addItem()">Add Item</button>
-</div>
+    <!-- Main Content -->
+    <main class="flex-grow max-w-4xl mx-auto w-full px-6 space-y-8 pb-10">
 
-<div class="section">
-<h2>Babies</h2>
-<div id="babyList"></div>
-</div>
+        <!-- Stats / Overview -->
+        <div class="grid grid-cols-2 gap-4">
+            <div class="glass-panel rounded-2xl p-6 flex flex-col items-center justify-center text-center fade-in" style="animation-delay: 0.05s;">
+                <span class="text-slate-500 text-[10px] font-semibold uppercase tracking-widest mb-2">Total Balance</span>
+                <span class="text-4xl font-light text-slate-800" id="total-balance">0</span>
+                <span class="text-xs text-slate-400 mt-1">Baby Bucks</span>
+            </div>
+            <div class="glass-panel rounded-2xl p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-transform hover:scale-[1.02] fade-in" style="animation-delay: 0.1s;" onclick="openStoreManager()">
+                <span class="text-slate-500 text-[10px] font-semibold uppercase tracking-widest mb-2">Store Items</span>
+                <span class="text-4xl font-light text-slate-800" id="total-items">0</span>
+                <span class="text-xs text-slate-400 mt-1">Manage Inventory</span>
+            </div>
+        </div>
 
-<div class="section">
-<h2>Store</h2>
-<div id="storeList"></div>
-</div>
+        <!-- Children Section -->
+        <div class="fade-in" style="animation-delay: 0.15s;">
+            <div class="flex justify-between items-center mb-5">
+                <h2 class="text-lg font-medium text-slate-600">Siblings</h2>
+                <button onclick="openAddChildModal()" class="glass-btn px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2">
+                    <i data-lucide="plus" class="w-4 h-4"></i> Add
+                </button>
+            </div>
+            
+            <div id="children-container" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Children cards generated here -->
+                <div class="col-span-full py-16 text-center text-slate-400 glass-panel rounded-2xl">
+                    <p class="text-sm font-light">No children added yet.</p>
+                </div>
+            </div>
+        </div>
 
-<script>
-const STORAGE_KEY = "babyBallanceData";
+        <!-- Store Preview Section -->
+        <div class="fade-in" style="animation-delay: 0.2s;">
+            <h2 class="text-lg font-medium text-slate-600 mb-5">Item Store</h2>
+            <div id="store-preview-container" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <!-- Store items generated here -->
+            </div>
+        </div>
 
-let data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {
-    babies: [],
-    items: [],
-    lastTick: Date.now()
-};
+    </main>
 
-function save() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-}
+    <!-- Footer -->
+    <footer class="mt-auto py-8">
+        <div class="max-w-4xl mx-auto px-4 text-center">
+            <p class="text-slate-400 text-xs font-light tracking-wide">Baby Balance &copy; Local Storage</p>
+        </div>
+    </footer>
 
-function addBaby() {
-    const name = document.getElementById("babyName").value.trim();
-    if (!name) return;
-    data.babies.push({
-        id: Date.now(),
-        name,
-        bucks: 0,
-        badUntil: 0,
-        history: []
-    });
-    document.getElementById("babyName").value = "";
-    save();
-    render();
-}
+    <!-- MODALS -->
+    <!-- Backdrop for all modals is handled individually for now, updating to consistent glass overlay -->
+    
+    <!-- Add Child Modal -->
+    <div id="modal-add-child" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-200/20 backdrop-blur-sm opacity-0 pointer-events-none transition-all duration-300">
+        <div class="glass-panel rounded-3xl w-full max-w-md mx-6 p-8 shadow-2xl transform scale-95 transition-all duration-300">
+            <h3 class="text-xl font-medium text-slate-800 mb-6">Add New Child</h3>
+            <input type="text" id="new-child-name" placeholder="Child's Name" class="glass-input w-full rounded-xl px-4 py-3 mb-6 text-lg placeholder-slate-400">
+            <div class="flex gap-4">
+                <button onclick="closeModal('modal-add-child')" class="flex-1 py-3 glass-btn rounded-xl font-medium">Cancel</button>
+                <button onclick="addChild()" class="flex-1 py-3 glass-btn rounded-xl font-medium text-slate-800 bg-white/40">Save</button>
+            </div>
+        </div>
+    </div>
 
-function removeBaby(id) {
-    data.babies = data.babies.filter(b => b.id !== id);
-    save();
-    render();
-}
+    <!-- Bad Behavior Modal -->
+    <div id="modal-bad" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-200/20 backdrop-blur-sm opacity-0 pointer-events-none transition-all duration-300">
+        <div class="glass-panel rounded-3xl w-full max-w-md mx-6 p-8 shadow-2xl">
+            <div class="text-center mb-8">
+                <div class="mx-auto w-12 h-12 flex items-center justify-center mb-2">
+                    <i data-lucide="frown" class="w-8 h-8 text-slate-400"></i>
+                </div>
+                <h3 class="text-xl font-medium text-slate-800">Log Action</h3>
+                <p class="text-sm text-slate-500 font-light mt-1">Pauses earning for a duration.</p>
+            </div>
+            
+            <input type="hidden" id="bad-child-id">
+            
+            <div class="grid grid-cols-3 gap-3 mb-8">
+                <button onclick="setBadTime(15)" class="time-btn glass-btn rounded-xl py-3 text-sm font-medium">15m</button>
+                <button onclick="setBadTime(30)" class="time-btn glass-btn rounded-xl py-3 text-sm font-medium">30m</button>
+                <button onclick="setBadTime(60)" class="time-btn glass-btn rounded-xl py-3 text-sm font-medium">1h</button>
+            </div>
+            
+            <div class="flex gap-4">
+                <button onclick="closeModal('modal-bad')" class="flex-1 py-3 glass-btn rounded-xl font-medium">Cancel</button>
+                <button onclick="confirmBadAction()" class="flex-1 py-3 glass-btn rounded-xl font-medium text-red-500 hover:text-red-600">Confirm</button>
+            </div>
+        </div>
+    </div>
 
-function addItem() {
-    const name = itemName.value.trim();
-    const icon = itemIcon.value.trim();
-    const cost = parseInt(itemCost.value);
-    if (!name || !icon || isNaN(cost)) return;
-    data.items.push({ id: Date.now(), name, icon, cost });
-    itemName.value = "";
-    itemIcon.value = "";
-    itemCost.value = "";
-    save();
-    render();
-}
+    <!-- Shop Modal -->
+    <div id="modal-shop" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-200/20 backdrop-blur-sm opacity-0 pointer-events-none transition-all duration-300">
+        <div class="glass-panel rounded-3xl w-full max-w-lg mx-6 p-0 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+            <div class="p-6 border-b border-white/30 flex justify-between items-center">
+                <div>
+                    <h3 class="text-lg font-medium text-slate-800">Spend</h3>
+                    <p class="text-xs text-slate-500 font-light mt-1">For <span id="shop-child-name" class="font-medium text-slate-700">...</span></p>
+                </div>
+                <button onclick="closeModal('modal-shop')" class="glass-btn p-2 rounded-full"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
+            
+            <input type="hidden" id="shop-child-id">
+            
+            <div class="p-6 overflow-y-auto" id="shop-items-grid">
+                <!-- Items populated by JS -->
+            </div>
+        </div>
+    </div>
 
-function spendBucks(babyId, cost) {
-    const baby = data.babies.find(b => b.id === babyId);
-    if (baby && baby.bucks >= cost) {
-        baby.bucks -= cost;
-        save();
-        render();
-    }
-}
+    <!-- Manual Adjust Modal -->
+    <div id="modal-adjust" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-200/20 backdrop-blur-sm opacity-0 pointer-events-none transition-all duration-300">
+        <div class="glass-panel rounded-3xl w-full max-w-sm mx-6 p-8 shadow-2xl">
+            <h3 class="text-lg font-medium text-slate-800 mb-6 text-center">Manual Adjustment</h3>
+            <input type="hidden" id="adjust-child-id">
+            
+            <div class="flex items-center justify-center gap-6 mb-8">
+                <button onclick="adjustValue(-1)" class="w-12 h-12 rounded-full glass-btn flex items-center justify-center"><i data-lucide="minus" class="w-5 h-5"></i></button>
+                <div class="text-4xl font-light text-slate-700 w-24 text-center" id="adjust-display">0</div>
+                <button onclick="adjustValue(1)" class="w-12 h-12 rounded-full glass-btn flex items-center justify-center"><i data-lucide="plus" class="w-5 h-5"></i></button>
+            </div>
+            
+            <div class="flex gap-4">
+                <button onclick="closeModal('modal-adjust')" class="flex-1 py-3 glass-btn rounded-xl font-medium">Cancel</button>
+                <button onclick="confirmAdjust()" class="flex-1 py-3 glass-btn rounded-xl font-medium text-slate-800">Update</button>
+            </div>
+        </div>
+    </div>
 
-function logBad(babyId, hours) {
-    const baby = data.babies.find(b => b.id === babyId);
-    if (!baby) return;
-    const until = Date.now() + hours * 3600000;
-    baby.badUntil = Math.max(baby.badUntil, until);
-    baby.history.push({ time: Date.now(), hours });
-    save();
-    render();
-}
+    <!-- Store Manager Modal -->
+    <div id="modal-store-manager" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-200/20 backdrop-blur-sm opacity-0 pointer-events-none transition-all duration-300">
+        <div class="glass-panel rounded-3xl w-full max-w-lg mx-6 p-8 shadow-2xl max-h-[85vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-8">
+                <h3 class="text-xl font-medium text-slate-800">Store Manager</h3>
+                <button onclick="closeModal('modal-store-manager')" class="glass-btn p-2 rounded-full"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
 
-function clearHistory(babyId) {
-    const baby = data.babies.find(b => b.id === babyId);
-    if (!baby) return;
-    baby.history = [];
-    baby.badUntil = 0;
-    save();
-    render();
-}
+            <div class="glass-panel p-5 rounded-2xl mb-8">
+                <h4 class="font-medium text-xs text-slate-500 uppercase tracking-widest mb-4">Create Item</h4>
+                <div class="space-y-3">
+                    <input type="text" id="new-item-name" placeholder="Item Name" class="glass-input w-full rounded-xl px-4 py-2 text-sm">
+                    <div class="flex gap-3">
+                        <input type="number" id="new-item-cost" placeholder="Cost" class="glass-input w-1/3 rounded-xl px-4 py-2 text-sm">
+                        <div class="relative w-2/3">
+                            <select id="new-item-icon" class="glass-input w-full rounded-xl px-4 py-2 text-sm appearance-none">
+                                <option value="gift">Gift</option>
+                                <option value="tv">TV</option>
+                                <option value="gamepad-2">Game</option>
+                                <option value="ice-cream">Treat</option>
+                                <option value="ticket">Ticket</option>
+                                <option value="clock">Time</option>
+                            </select>
+                            <i data-lucide="chevron-down" class="absolute right-3 top-2.5 w-4 h-4 text-slate-400 pointer-events-none"></i>
+                        </div>
+                    </div>
+                    <button onclick="addStoreItem()" class="w-full py-2 glass-btn rounded-xl text-sm font-medium mt-2">Add Item</button>
+                </div>
+            </div>
 
-function hourlyTick() {
-    const now = Date.now();
-    const hoursPassed = Math.floor((now - data.lastTick) / 3600000);
-    if (hoursPassed > 0) {
-        data.babies.forEach(baby => {
-            for (let i = 0; i < hoursPassed; i++) {
-                if (Date.now() > baby.badUntil) {
-                    baby.bucks += 5;
+            <h4 class="font-medium text-xs text-slate-500 uppercase tracking-widest mb-4">Inventory</h4>
+            <div id="manager-items-list" class="space-y-3">
+                <!-- List populated by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="modal-settings" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-200/20 backdrop-blur-sm opacity-0 pointer-events-none transition-all duration-300">
+        <div class="glass-panel rounded-3xl w-full max-w-sm mx-6 p-8 shadow-2xl text-center">
+            <h3 class="text-lg font-medium text-slate-800 mb-8">Settings</h3>
+            
+            <button onclick="resetAllData()" class="w-full py-3 glass-btn rounded-xl text-red-500 hover:text-red-600 font-medium flex items-center justify-center gap-2 mb-4">
+                <i data-lucide="trash-2" class="w-4 h-4"></i> Reset Data
+            </button>
+            
+            <button onclick="closeModal('modal-settings')" class="w-full py-3 glass-btn rounded-xl font-medium text-slate-600">
+                Close
+            </button>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-6 left-1/2 transform -translate-x-1/2 glass-panel px-6 py-3 rounded-full shadow-xl opacity-0 transition-all duration-300 pointer-events-none z-50 flex items-center gap-3">
+        <i data-lucide="info" class="w-4 h-4 text-slate-600"></i>
+        <span id="toast-message" class="text-sm font-medium text-slate-700">Notification</span>
+    </div>
+
+    <script>
+        // --- State Management ---
+        const APP_KEY = 'baby_balance_data_glass';
+        let state = {
+            children: [],
+            items: [],
+            lastSaved: Date.now()
+        };
+
+        // --- Defaults ---
+        const DEFAULT_ITEMS = [];
+
+        // --- Initialization ---
+        function init() {
+            loadData();
+            
+            // If no items, load defaults
+            if (state.items.length === 0) {
+                state.items = JSON.parse(JSON.stringify(DEFAULT_ITEMS));
+                saveData();
+            }
+
+            processOfflineTime();
+            render();
+            lucide.createIcons();
+            setInterval(gameLoop, 1000);
+        }
+
+        // --- Core Logic ---
+        function processOfflineTime() {
+            const now = Date.now();
+            const lastSaved = state.lastSaved || now;
+            
+            state.children.forEach(child => {
+                if (!child.earningProgress) child.earningProgress = 0;
+
+                if (child.status === 'bad' && child.badUntil) {
+                    if (child.badUntil <= now) {
+                        const timeInGood = now - child.badUntil;
+                        child.status = 'good';
+                        child.badUntil = null;
+                        if (timeInGood > 0) child.earningProgress += timeInGood;
+                    }
+                } else {
+                    const timeElapsed = now - lastSaved;
+                    child.earningProgress += timeElapsed;
+                }
+
+                const ONE_HOUR_MS = 3600000;
+                while (child.earningProgress >= ONE_HOUR_MS) {
+                    child.balance += 5;
+                    child.earningProgress -= ONE_HOUR_MS;
+                }
+            });
+            state.lastSaved = now;
+            saveData();
+        }
+
+        function gameLoop() {
+            const now = Date.now();
+            let needsRender = false;
+
+            state.children.forEach(child => {
+                if (child.status === 'bad' && child.badUntil) {
+                    if (now >= child.badUntil) {
+                        child.status = 'good';
+                        child.badUntil = null;
+                        showToast(`${child.name} is back in Good Mode!`);
+                        needsRender = true;
+                    }
+                } else if (child.status === 'good') {
+                    child.earningProgress += 1000;
+                    const ONE_HOUR_MS = 3600000;
+                    if (child.earningProgress >= ONE_HOUR_MS) {
+                        child.balance += 5;
+                        child.earningProgress -= ONE_HOUR_MS;
+                        showToast(`${child.name} earned 5 Baby Bucks!`);
+                        needsRender = true;
+                    }
+                }
+            });
+
+            state.lastSaved = now;
+            saveData();
+            updateCountdowns();
+            if (needsRender) render();
+        }
+
+        function updateCountdowns() {
+            const now = Date.now();
+            state.children.forEach(child => {
+                if (child.status === 'bad') {
+                    const el = document.getElementById(`timer-${child.id}`);
+                    if (el) {
+                        const remaining = Math.max(0, Math.ceil((child.badUntil - now) / 1000));
+                        const m = Math.floor(remaining / 60);
+                        const s = remaining % 60;
+                        el.innerText = `${m}m ${s}s`;
+                    }
+                } else {
+                    const bar = document.getElementById(`progress-${child.id}`);
+                    if (bar) {
+                        const pct = Math.min(100, (child.earningProgress / 3600000) * 100);
+                        bar.style.width = `${pct}%`;
+                    }
+                }
+            });
+        }
+
+        // --- Data Persistence ---
+        function loadData() {
+            try {
+                const stored = localStorage.getItem(APP_KEY);
+                if (stored) {
+                    state = JSON.parse(stored);
+                    state.children.forEach(c => {
+                        if (typeof c.earningProgress === 'undefined') c.earningProgress = 0;
+                    });
+                }
+            } catch (e) { console.error("Failed to load data", e); }
+        }
+
+        function saveData() {
+            state.lastSaved = Date.now();
+            localStorage.setItem(APP_KEY, JSON.stringify(state));
+        }
+
+        function resetAllData() {
+            if(confirm("Are you sure? This deletes all children and history.")) {
+                state = { children: [], items: JSON.parse(JSON.stringify(DEFAULT_ITEMS)), lastSaved: Date.now() };
+                saveData();
+                render();
+                closeModal('modal-settings');
+                showToast("All data reset.");
+            }
+        }
+
+        // --- Rendering ---
+        function render() {
+            const container = document.getElementById('children-container');
+            const totalBalanceEl = document.getElementById('total-balance');
+            const totalItemsEl = document.getElementById('total-items');
+
+            const total = state.children.reduce((acc, c) => acc + c.balance, 0);
+            totalBalanceEl.innerText = total;
+            totalItemsEl.innerText = state.items.length;
+
+            if (state.children.length === 0) {
+                container.innerHTML = `
+                <div class="col-span-full py-16 text-center glass-panel rounded-2xl fade-in">
+                    <div class="inline-block p-4 rounded-full bg-white/20 mb-3">
+                        <i data-lucide="users" class="w-8 h-8 text-slate-400"></i>
+                    </div>
+                    <p class="text-slate-500 font-light text-sm">No children added yet.<br>Tap "Add" to start.</p>
+                </div>`;
+            } else {
+                container.innerHTML = state.children.map(child => {
+                    const isBad = child.status === 'bad';
+                    return `
+                    <div class="glass-panel rounded-3xl p-6 relative flex flex-col justify-between overflow-hidden transition-all hover:bg-white/40 ${isBad ? 'glass-bad-active' : ''} fade-in">
+                        
+                        ${!isBad ? `<div class="absolute top-0 left-0 h-[2px] w-full bg-white/20"><div id="progress-${child.id}" class="h-full bg-slate-400/50 transition-all duration-1000" style="width:0%"></div></div>` : ''}
+
+                        <div class="flex justify-between items-start mb-6">
+                            <div>
+                                <h3 class="text-xl font-medium text-slate-800 tracking-tight">${child.name}</h3>
+                                ${isBad 
+                                    ? `<span class="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-red-500 mt-1"><i data-lucide="lock" class="w-3 h-3"></i> Paused</span>`
+                                    : `<span class="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-green-600 mt-1"><i data-lucide="check" class="w-3 h-3"></i> Active</span>`
+                                }
+                            </div>
+                            <div class="text-right">
+                                <span class="block text-4xl font-light ${isBad ? 'text-slate-400' : 'text-slate-800'}">${child.balance}</span>
+                                <span class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Bucks</span>
+                            </div>
+                        </div>
+
+                        ${isBad ? `
+                            <div class="glass-panel rounded-xl p-3 mb-6 text-center border-red-200/30">
+                                <p class="text-[10px] font-bold text-red-400 uppercase tracking-widest mb-1">Time Out</p>
+                                <p id="timer-${child.id}" class="text-lg font-mono text-red-500/80 font-medium">...</p>
+                                <button onclick="endBadMode('${child.id}')" class="text-xs text-slate-400 underline mt-2 hover:text-slate-600">End Early</button>
+                            </div>
+                        ` : ''}
+
+                        <div class="grid grid-cols-3 gap-3 mt-auto">
+                            <button onclick="openAdjustModal('${child.id}')" class="glass-btn flex flex-col items-center justify-center py-3 rounded-xl">
+                                <i data-lucide="sliders-horizontal" class="w-4 h-4 mb-1 opacity-70"></i>
+                                <span class="text-[10px] font-semibold uppercase tracking-wide">Adjust</span>
+                            </button>
+                            <button onclick="openBadModal('${child.id}')" ${isBad ? 'disabled' : ''} class="glass-btn flex flex-col items-center justify-center py-3 rounded-xl ${isBad ? '' : 'hover:text-red-500'}">
+                                <i data-lucide="frown" class="w-4 h-4 mb-1 opacity-70"></i>
+                                <span class="text-[10px] font-semibold uppercase tracking-wide">Log Bad</span>
+                            </button>
+                            <button onclick="openShopModal('${child.id}')" ${isBad ? 'disabled' : ''} class="glass-btn flex flex-col items-center justify-center py-3 rounded-xl ${isBad ? '' : 'hover:text-blue-500'}">
+                                <i data-lucide="shopping-bag" class="w-4 h-4 mb-1 opacity-70"></i>
+                                <span class="text-[10px] font-semibold uppercase tracking-wide">Spend</span>
+                            </button>
+                        </div>
+                        
+                        <button onclick="deleteChild('${child.id}')" class="absolute top-4 right-4 p-2 text-slate-300 hover:text-red-400 transition-colors opacity-0 hover:opacity-100 group-hover:opacity-100">
+                            <i data-lucide="trash" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                    `;
+                }).join('');
+            }
+
+            // Preview Store Items
+            const storePreview = document.getElementById('store-preview-container');
+            if(state.items.length === 0) {
+                storePreview.innerHTML = '<p class="text-slate-400 font-light text-sm col-span-3 text-center py-4">Store is empty.</p>';
+            } else {
+                storePreview.innerHTML = state.items.map(item => `
+                    <div class="glass-panel p-4 rounded-xl flex items-center gap-3 hover:bg-white/40 transition-colors">
+                        <i data-lucide="${item.icon}" class="w-5 h-5 text-slate-500"></i>
+                        <div class="overflow-hidden">
+                            <h4 class="font-medium text-slate-700 text-sm truncate">${item.name}</h4>
+                            <span class="text-xs font-medium text-slate-400">${item.cost} Bucks</span>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            lucide.createIcons();
+        }
+
+        function renderStoreManagerList() {
+            const list = document.getElementById('manager-items-list');
+            list.innerHTML = state.items.map(item => `
+                <div class="flex justify-between items-center glass-panel p-3 rounded-xl">
+                    <div class="flex items-center gap-3">
+                        <i data-lucide="${item.icon}" class="w-4 h-4 text-slate-400"></i>
+                        <div>
+                            <p class="font-medium text-slate-700 text-sm">${item.name}</p>
+                            <p class="text-xs text-slate-400">${item.cost} Bucks</p>
+                        </div>
+                    </div>
+                    <button onclick="deleteStoreItem('${item.id}')" class="text-slate-300 hover:text-red-400 p-2 transition-colors"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                </div>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        function renderShopGrid(childId) {
+            const child = state.children.find(c => c.id === childId);
+            const grid = document.getElementById('shop-items-grid');
+            const nameSpan = document.getElementById('shop-child-name');
+            nameSpan.innerText = `${child.name} (${child.balance})`;
+            document.getElementById('shop-child-id').value = childId;
+
+            if(state.items.length === 0) {
+                grid.innerHTML = `<div class="text-center py-10 text-slate-400 font-light">Store is empty.</div>`;
+                return;
+            }
+
+            grid.innerHTML = `<div class="grid grid-cols-2 gap-3">` + state.items.map(item => {
+                const canAfford = child.balance >= item.cost;
+                return `
+                <button onclick="buyItem('${item.id}', '${childId}')" ${!canAfford ? 'disabled' : ''} class="relative text-left p-5 rounded-2xl glass-btn ${canAfford ? 'hover:bg-white/60' : 'opacity-50 cursor-not-allowed'}">
+                    <div class="mb-3">
+                        <i data-lucide="${item.icon}" class="w-6 h-6 ${canAfford ? 'text-slate-600' : 'text-slate-400'}"></i>
+                    </div>
+                    <h4 class="font-medium text-slate-800 text-sm leading-tight mb-1">${item.name}</h4>
+                    <span class="text-xs font-bold ${canAfford ? 'text-green-600' : 'text-slate-400'}">${item.cost} Bucks</span>
+                </button>
+                `;
+            }).join('') + `</div>`;
+            lucide.createIcons();
+        }
+
+        // --- Actions --- (Same logic as before, just triggering renders)
+        function addChild() {
+            const nameInput = document.getElementById('new-child-name');
+            const name = nameInput.value.trim();
+            if (!name) return;
+            state.children.push({ id: crypto.randomUUID(), name, balance: 0, status: 'good', badUntil: null, earningProgress: 0 });
+            saveData(); nameInput.value = ''; closeModal('modal-add-child'); render(); showToast(`${name} added!`);
+        }
+
+        function deleteChild(id) {
+            if(confirm("Remove this child?")) { state.children = state.children.filter(c => c.id !== id); saveData(); render(); }
+        }
+
+        function addStoreItem() {
+            const name = document.getElementById('new-item-name').value;
+            const cost = document.getElementById('new-item-cost').value;
+            const icon = document.getElementById('new-item-icon').value;
+            if(!name || !cost) return;
+            state.items.push({ id: crypto.randomUUID(), name, cost: parseInt(cost), icon });
+            saveData(); renderStoreManagerList(); render();
+            document.getElementById('new-item-name').value = ''; document.getElementById('new-item-cost').value = '';
+        }
+
+        function deleteStoreItem(id) {
+            state.items = state.items.filter(i => i.id !== id); saveData(); renderStoreManagerList(); render();
+        }
+
+        function buyItem(itemId, childId) {
+            const child = state.children.find(c => c.id === childId);
+            const item = state.items.find(i => i.id === itemId);
+            if (child && item && child.balance >= item.cost) {
+                if(confirm(`Buy ${item.name}?`)) {
+                    child.balance -= item.cost; saveData(); closeModal('modal-shop'); render(); showToast(`${item.name} purchased!`);
                 }
             }
-        });
-        data.lastTick += hoursPassed * 3600000;
-        save();
-        render();
-    }
-}
+        }
 
-function render() {
-    const list = document.getElementById("babyList");
-    list.innerHTML = "";
-    data.babies.forEach(baby => {
-        const div = document.createElement("div");
-        div.className = "babyCard";
-        const bad = Date.now() < baby.badUntil;
-        div.innerHTML = `
-            <strong>${baby.name}</strong><br>
-            Baby Bucks: ${baby.bucks}<br>
-            Status: <span class="${bad ? "badMode" : "goodMode"}">
-            ${bad ? "Bad mode active" : "Good mode"}
-            </span><br><br>
+        let selectedBadDuration = 15;
+        function setBadTime(mins) {
+            selectedBadDuration = mins;
+            document.querySelectorAll('.time-btn').forEach(btn => {
+                if(btn.innerText.includes(mins)) {
+                    btn.classList.add('bg-white/60', 'text-slate-800', 'border-white');
+                } else {
+                    btn.classList.remove('bg-white/60', 'text-slate-800', 'border-white');
+                }
+            });
+        }
 
-            Log bad action:
-            <input type="number" min="1" value="1" id="bad_${baby.id}">
-            hours
-            <button onclick="logBad(${baby.id}, document.getElementById('bad_${baby.id}').value)">Log</button>
-            <br><br>
+        function confirmBadAction() {
+            const id = document.getElementById('bad-child-id').value;
+            const child = state.children.find(c => c.id === id);
+            if(child) {
+                child.status = 'bad';
+                child.badUntil = Date.now() + (selectedBadDuration * 60000);
+                saveData(); closeModal('modal-bad'); render(); showToast(`${child.name} paused.`);
+            }
+        }
 
-            <button onclick="clearHistory(${baby.id})">Clear History</button>
-            <button onclick="removeBaby(${baby.id})">Remove Baby</button>
-        `;
-        list.appendChild(div);
-    });
+        function endBadMode(id) {
+            if(confirm("End bad mode early?")) {
+                const child = state.children.find(c => c.id === id);
+                child.status = 'good'; child.badUntil = null; saveData(); render();
+            }
+        }
 
-    const store = document.getElementById("storeList");
-    store.innerHTML = "";
-    data.items.forEach(item => {
-        const div = document.createElement("div");
-        div.className = "babyCard";
-        div.innerHTML = `
-            ${item.icon} ${item.name} Cost ${item.cost}
-            <br>
-            ${data.babies.map(b =>
-                `<button onclick="spendBucks(${b.id}, ${item.cost})">
-                Buy for ${b.name}
-                </button>`
-            ).join("")}
-        `;
-        store.appendChild(div);
-    });
-}
+        let adjustAmount = 0;
+        function openAdjustModal(id) {
+            document.getElementById('adjust-child-id').value = id;
+            adjustAmount = 0; updateAdjustDisplay(); openModal('modal-adjust');
+        }
 
-setInterval(hourlyTick, 60000);
-render();
-</script>
+        function adjustValue(val) { adjustAmount += val; updateAdjustDisplay(); }
+        function updateAdjustDisplay() {
+            const el = document.getElementById('adjust-display');
+            el.innerText = (adjustAmount > 0 ? '+' : '') + adjustAmount;
+            el.className = `text-4xl font-light w-24 text-center ${adjustAmount > 0 ? 'text-green-600' : (adjustAmount < 0 ? 'text-red-500' : 'text-slate-700')}`;
+        }
+        function confirmAdjust() {
+            const id = document.getElementById('adjust-child-id').value;
+            const child = state.children.find(c => c.id === id);
+            if(child && adjustAmount !== 0) { child.balance += adjustAmount; saveData(); render(); showToast(`Updated.`); }
+            closeModal('modal-adjust');
+        }
 
+        // --- UI Utils ---
+        function openModal(id) {
+            const el = document.getElementById(id);
+            el.classList.remove('opacity-0', 'pointer-events-none');
+            el.querySelector('div').classList.remove('scale-95');
+            el.querySelector('div').classList.add('scale-100');
+        }
+        function closeModal(id) {
+            const el = document.getElementById(id);
+            el.classList.add('opacity-0', 'pointer-events-none');
+            el.querySelector('div').classList.remove('scale-100');
+            el.querySelector('div').classList.add('scale-95');
+        }
+
+        function openAddChildModal() { openModal('modal-add-child'); document.getElementById('new-child-name').focus(); }
+        function openBadModal(id) { document.getElementById('bad-child-id').value = id; setBadTime(15); openModal('modal-bad'); }
+        function openShopModal(id) { renderShopGrid(id); openModal('modal-shop'); }
+        function openStoreManager() { renderStoreManagerList(); openModal('modal-store-manager'); }
+        function openSettings() { openModal('modal-settings'); }
+        
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            document.getElementById('toast-message').innerText = msg;
+            t.classList.remove('opacity-0', 'translate-y-4');
+            setTimeout(() => t.classList.add('opacity-0', 'translate-y-4'), 3000);
+        }
+
+        window.addEventListener('DOMContentLoaded', init);
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) { processOfflineTime(); render(); } });
+
+    </script>
 </body>
 </html>
