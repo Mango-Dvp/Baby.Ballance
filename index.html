@@ -8,11 +8,16 @@
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Google Fonts: Inter for Clean/Minimal Look -->
+    <!-- Google Fonts: Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"></script>
 
     <style>
         body {
@@ -20,7 +25,7 @@
             margin: 0;
             padding: 0;
             overflow-x: hidden;
-            color: #334155; /* Slate 700 */
+            color: #334155;
             -webkit-tap-highlight-color: transparent;
         }
 
@@ -53,7 +58,7 @@
             100% { transform: translate(30px, -30px) scale(1.05); }
         }
 
-        /* --- Glassmorphism Utilities --- */
+        /* --- Glassmorphism --- */
         .glass-panel {
             background: rgba(255, 255, 255, 0.35);
             backdrop-filter: blur(12px);
@@ -76,7 +81,6 @@
             box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
         }
 
-        /* Glass Buttons (Slabs) */
         .glass-btn {
             background: rgba(255, 255, 255, 0.3);
             border: 1px solid rgba(255, 255, 255, 0.5);
@@ -92,29 +96,16 @@
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
             color: #1e293b;
         }
-        .glass-btn:active {
-            transform: translateY(0);
-            background: rgba(255, 255, 255, 0.7);
-        }
-        .glass-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
-        }
+        .glass-btn:active { transform: translateY(0); background: rgba(255, 255, 255, 0.7); }
+        .glass-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
-        /* Special States (Glass versions) */
         .glass-bad-active {
-            background: rgba(254, 226, 226, 0.3); /* Red tint */
+            background: rgba(254, 226, 226, 0.3);
             border-color: rgba(254, 202, 202, 0.4);
         }
 
-        /* --- Scrollbar --- */
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.2); }
-
-        /* --- Animations --- */
+        /* --- Helpers --- */
+        .hidden-force { display: none !important; }
         .fade-in { animation: fadeIn 0.4s ease-out forwards; opacity: 0; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
@@ -129,17 +120,51 @@
         <div class="blob blob-3"></div>
     </div>
 
+    <!-- Login Modal (Overlay) -->
+    <div id="modal-login" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-200/50 backdrop-blur-md transition-all duration-300">
+        <div class="glass-panel rounded-3xl w-full max-w-sm mx-6 p-8 shadow-2xl">
+            <div class="text-center mb-6">
+                <div class="inline-block p-3 rounded-full bg-white/40 mb-3">
+                    <i data-lucide="user-circle" class="w-8 h-8 text-slate-500"></i>
+                </div>
+                <h2 class="text-2xl font-medium text-slate-800">Who is this?</h2>
+                <p class="text-sm text-slate-500 mt-1">Please enter your name</p>
+            </div>
+
+            <div class="space-y-4">
+                <input type="text" id="login-name" placeholder="Name (e.g. Elijah, Lacey)" class="glass-input w-full rounded-xl px-4 py-3 text-lg text-center placeholder-slate-400 capitalize" oninput="checkLoginName()">
+                
+                <div id="pin-container" class="hidden-force space-y-2 overflow-hidden transition-all duration-300">
+                    <p class="text-xs text-center text-slate-400 font-bold uppercase tracking-wide">Enter PIN</p>
+                    <input type="password" id="login-pin" maxlength="4" class="glass-input w-full rounded-xl px-4 py-3 text-lg text-center tracking-[0.5em]" placeholder="••••">
+                </div>
+
+                <button onclick="attemptLogin()" class="w-full py-3 glass-btn rounded-xl font-medium text-slate-800 mt-2">
+                    Enter
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Navbar -->
     <nav class="sticky top-0 z-40 glass-panel border-b-0 border-b border-white/40 mb-6">
         <div class="max-w-4xl mx-auto px-6 py-4 flex justify-between items-center">
             <div class="flex items-center gap-3">
-                <!-- Icon: No background, just the icon -->
                 <i data-lucide="baby" class="w-6 h-6 text-slate-600"></i>
-                <h1 class="text-xl font-semibold tracking-tight text-slate-700">Baby Balance</h1>
+                <div>
+                    <h1 class="text-xl font-semibold tracking-tight text-slate-700 leading-none">Baby Balance</h1>
+                    <span id="current-user-badge" class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Guest</span>
+                </div>
             </div>
-            <button onclick="openSettings()" class="glass-btn p-2 rounded-full">
-                <i data-lucide="settings" class="w-5 h-5"></i>
-            </button>
+            
+            <div class="flex gap-2">
+                <button onclick="logout()" class="glass-btn p-2 rounded-full" title="Logout">
+                    <i data-lucide="log-out" class="w-5 h-5"></i>
+                </button>
+                <button onclick="openSettings()" id="btn-settings" class="glass-btn p-2 rounded-full hidden-force">
+                    <i data-lucide="settings" class="w-5 h-5"></i>
+                </button>
+            </div>
         </div>
     </nav>
 
@@ -150,13 +175,19 @@
         <div class="grid grid-cols-2 gap-4">
             <div class="glass-panel rounded-2xl p-6 flex flex-col items-center justify-center text-center fade-in" style="animation-delay: 0.05s;">
                 <span class="text-slate-500 text-[10px] font-semibold uppercase tracking-widest mb-2">Total Balance</span>
-                <span class="text-4xl font-light text-slate-800" id="total-balance">0</span>
+                <span class="text-4xl font-light text-slate-800" id="total-balance">--</span>
                 <span class="text-xs text-slate-400 mt-1">Baby Bucks</span>
             </div>
-            <div class="glass-panel rounded-2xl p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-transform hover:scale-[1.02] fade-in" style="animation-delay: 0.1s;" onclick="openStoreManager()">
+            <div id="card-store-manager" class="glass-panel rounded-2xl p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-transform hover:scale-[1.02] fade-in hidden-force" style="animation-delay: 0.1s;" onclick="openStoreManager()">
                 <span class="text-slate-500 text-[10px] font-semibold uppercase tracking-widest mb-2">Store Items</span>
-                <span class="text-4xl font-light text-slate-800" id="total-items">0</span>
+                <span class="text-4xl font-light text-slate-800" id="total-items">--</span>
                 <span class="text-xs text-slate-400 mt-1">Manage Inventory</span>
+            </div>
+            <!-- Replacement for Store Manager card for non-admins -->
+            <div id="card-store-readonly" class="glass-panel rounded-2xl p-6 flex flex-col items-center justify-center text-center fade-in hidden-force" style="animation-delay: 0.1s;">
+                 <span class="text-slate-500 text-[10px] font-semibold uppercase tracking-widest mb-2">Store Items</span>
+                <span class="text-4xl font-light text-slate-800" id="total-items-ro">--</span>
+                <span class="text-xs text-slate-400 mt-1">Available</span>
             </div>
         </div>
 
@@ -164,7 +195,7 @@
         <div class="fade-in" style="animation-delay: 0.15s;">
             <div class="flex justify-between items-center mb-5">
                 <h2 class="text-lg font-medium text-slate-600">Siblings</h2>
-                <button onclick="openAddChildModal()" class="glass-btn px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2">
+                <button id="btn-add-child" onclick="openAddChildModal()" class="glass-btn px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 hidden-force">
                     <i data-lucide="plus" class="w-4 h-4"></i> Add
                 </button>
             </div>
@@ -172,7 +203,7 @@
             <div id="children-container" class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <!-- Children cards generated here -->
                 <div class="col-span-full py-16 text-center text-slate-400 glass-panel rounded-2xl">
-                    <p class="text-sm font-light">No children added yet.</p>
+                    <p class="text-sm font-light">Loading family data...</p>
                 </div>
             </div>
         </div>
@@ -190,12 +221,11 @@
     <!-- Footer -->
     <footer class="mt-auto py-8">
         <div class="max-w-4xl mx-auto px-4 text-center">
-            <p class="text-slate-400 text-xs font-light tracking-wide">Baby Balance &copy; Local Storage</p>
+            <p class="text-slate-400 text-xs font-light tracking-wide">Baby Balance &copy; Cloud Sync</p>
         </div>
     </footer>
 
     <!-- MODALS -->
-    <!-- Backdrop for all modals is handled individually for now, updating to consistent glass overlay -->
     
     <!-- Add Child Modal -->
     <div id="modal-add-child" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-200/20 backdrop-blur-sm opacity-0 pointer-events-none transition-all duration-300">
@@ -316,7 +346,7 @@
             <h3 class="text-lg font-medium text-slate-800 mb-8">Settings</h3>
             
             <button onclick="resetAllData()" class="w-full py-3 glass-btn rounded-xl text-red-500 hover:text-red-600 font-medium flex items-center justify-center gap-2 mb-4">
-                <i data-lucide="trash-2" class="w-4 h-4"></i> Reset Data
+                <i data-lucide="trash-2" class="w-4 h-4"></i> Reset All Data
             </button>
             
             <button onclick="closeModal('modal-settings')" class="w-full py-3 glass-btn rounded-xl font-medium text-slate-600">
@@ -326,44 +356,138 @@
     </div>
 
     <!-- Toast Notification -->
-    <div id="toast" class="fixed bottom-6 left-1/2 transform -translate-x-1/2 glass-panel px-6 py-3 rounded-full shadow-xl opacity-0 transition-all duration-300 pointer-events-none z-50 flex items-center gap-3">
+    <div id="toast" class="fixed bottom-6 left-1/2 transform -translate-x-1/2 glass-panel px-6 py-3 rounded-full shadow-xl opacity-0 transition-all duration-300 pointer-events-none z-[60] flex items-center gap-3">
         <i data-lucide="info" class="w-4 h-4 text-slate-600"></i>
         <span id="toast-message" class="text-sm font-medium text-slate-700">Notification</span>
     </div>
 
-    <script>
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+        import { getFirestore, doc, onSnapshot, setDoc, collection } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+
+        // --- Firebase Config & Init ---
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        let docRef; // Reference to the single data document
+        let currentUser = null; // { name: string, role: 'admin' | 'adjuster' | 'viewer' }
+
         // --- State Management ---
-        const APP_KEY = 'baby_balance_data_glass';
         let state = {
             children: [],
             items: [],
             lastSaved: Date.now()
         };
 
-        // --- Defaults ---
-        const DEFAULT_ITEMS = [];
+        // --- Auth & Initialization ---
+        async function initAuth() {
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                await signInWithCustomToken(auth, __initial_auth_token);
+            } else {
+                await signInAnonymously(auth);
+            }
+        }
 
-        // --- Initialization ---
-        function init() {
-            loadData();
+        initAuth();
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                // Setup Database Reference
+                docRef = doc(db, 'artifacts', appId, 'public', 'data', 'family_store');
+                
+                // Start Listening to Data
+                onSnapshot(docRef, (docSnap) => {
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        // Merge logic: keep local UI state if needed, but here we just sync
+                        state = data;
+                        
+                        // Handle migration for earningProgress
+                        state.children.forEach(c => {
+                            if (typeof c.earningProgress === 'undefined') c.earningProgress = 0;
+                        });
+                        
+                        processOfflineTime(); // Recalc time based on new data
+                        render();
+                    } else {
+                        // First time run, create doc
+                        saveData();
+                    }
+                }, (error) => {
+                    console.error("Data sync error:", error);
+                    showToast("Sync Error. Check connection.");
+                });
+
+                // Start Game Loop
+                setInterval(gameLoop, 1000);
+            }
+        });
+
+        // --- Application Login Logic ---
+        window.checkLoginName = function() {
+            const name = document.getElementById('login-name').value.trim().toLowerCase();
+            const pinContainer = document.getElementById('pin-container');
             
-            // If no items, load defaults
-            if (state.items.length === 0) {
-                state.items = JSON.parse(JSON.stringify(DEFAULT_ITEMS));
-                saveData();
+            if (name === 'elijah') {
+                pinContainer.classList.remove('hidden-force');
+                pinContainer.classList.remove('h-0', 'opacity-0');
+                pinContainer.classList.add('h-20', 'opacity-100');
+            } else {
+                pinContainer.classList.add('hidden-force');
+                document.getElementById('login-pin').value = '';
+            }
+        }
+
+        window.attemptLogin = function() {
+            const nameInput = document.getElementById('login-name').value.trim();
+            const nameLower = nameInput.toLowerCase();
+            const pin = document.getElementById('login-pin').value;
+
+            if (!nameInput) return;
+
+            let role = 'viewer';
+
+            if (nameLower === 'elijah') {
+                if (pin === '1912') {
+                    role = 'admin';
+                } else {
+                    alert("Incorrect PIN for Elijah.");
+                    return;
+                }
+            } else if (nameLower === 'lacey' || nameLower === 'chris') {
+                role = 'adjuster';
             }
 
-            processOfflineTime();
+            // Set User
+            currentUser = { name: nameInput, role: role };
+            
+            // UI Update
+            document.getElementById('current-user-badge').innerText = `${currentUser.name} • ${role === 'admin' ? 'Admin' : (role === 'adjuster' ? 'Parent' : 'Viewer')}`;
+            document.getElementById('modal-login').classList.add('opacity-0', 'pointer-events-none');
+            
+            // Re-render to show/hide buttons based on role
             render();
-            lucide.createIcons();
-            setInterval(gameLoop, 1000);
+            showToast(`Welcome, ${currentUser.name}!`);
+        }
+
+        window.logout = function() {
+            currentUser = null;
+            document.getElementById('login-name').value = '';
+            document.getElementById('login-pin').value = '';
+            document.getElementById('pin-container').classList.add('hidden-force');
+            document.getElementById('modal-login').classList.remove('opacity-0', 'pointer-events-none');
         }
 
         // --- Core Logic ---
         function processOfflineTime() {
             const now = Date.now();
             const lastSaved = state.lastSaved || now;
-            
+            let changed = false;
+
             state.children.forEach(child => {
                 if (!child.earningProgress) child.earningProgress = 0;
 
@@ -373,24 +497,36 @@
                         child.status = 'good';
                         child.badUntil = null;
                         if (timeInGood > 0) child.earningProgress += timeInGood;
+                        changed = true;
                     }
                 } else {
                     const timeElapsed = now - lastSaved;
                     child.earningProgress += timeElapsed;
+                    changed = true;
                 }
 
                 const ONE_HOUR_MS = 3600000;
                 while (child.earningProgress >= ONE_HOUR_MS) {
                     child.balance += 5;
                     child.earningProgress -= ONE_HOUR_MS;
+                    changed = true;
                 }
             });
-            state.lastSaved = now;
-            saveData();
+
+            if (changed) {
+                // We don't save immediately here to avoid write loops with onSnapshot
+                // Instead, we just update local state, and gameLoop will eventually save if needed
+                // OR we save only if we are the "active" tab. For simplicity, we just save.
+                // Note: To prevent loops, we check logic in render/loop. 
+                // But for offline catchup, we should save once.
+                state.lastSaved = now;
+                saveData();
+            }
         }
 
         function gameLoop() {
             const now = Date.now();
+            let needsSave = false;
             let needsRender = false;
 
             state.children.forEach(child => {
@@ -399,6 +535,7 @@
                         child.status = 'good';
                         child.badUntil = null;
                         showToast(`${child.name} is back in Good Mode!`);
+                        needsSave = true;
                         needsRender = true;
                     }
                 } else if (child.status === 'good') {
@@ -408,75 +545,70 @@
                         child.balance += 5;
                         child.earningProgress -= ONE_HOUR_MS;
                         showToast(`${child.name} earned 5 Baby Bucks!`);
+                        needsSave = true;
                         needsRender = true;
                     }
                 }
             });
 
-            state.lastSaved = now;
-            saveData();
+            // Only save periodically or on significant events to save writes
+            if (needsSave || (Date.now() - state.lastSaved > 60000)) {
+                state.lastSaved = now;
+                saveData();
+            }
+            
             updateCountdowns();
             if (needsRender) render();
         }
 
-        function updateCountdowns() {
-            const now = Date.now();
-            state.children.forEach(child => {
-                if (child.status === 'bad') {
-                    const el = document.getElementById(`timer-${child.id}`);
-                    if (el) {
-                        const remaining = Math.max(0, Math.ceil((child.badUntil - now) / 1000));
-                        const m = Math.floor(remaining / 60);
-                        const s = remaining % 60;
-                        el.innerText = `${m}m ${s}s`;
-                    }
-                } else {
-                    const bar = document.getElementById(`progress-${child.id}`);
-                    if (bar) {
-                        const pct = Math.min(100, (child.earningProgress / 3600000) * 100);
-                        bar.style.width = `${pct}%`;
-                    }
-                }
-            });
-        }
-
-        // --- Data Persistence ---
-        function loadData() {
+        async function saveData() {
+            if (!docRef) return;
             try {
-                const stored = localStorage.getItem(APP_KEY);
-                if (stored) {
-                    state = JSON.parse(stored);
-                    state.children.forEach(c => {
-                        if (typeof c.earningProgress === 'undefined') c.earningProgress = 0;
-                    });
-                }
-            } catch (e) { console.error("Failed to load data", e); }
-        }
-
-        function saveData() {
-            state.lastSaved = Date.now();
-            localStorage.setItem(APP_KEY, JSON.stringify(state));
-        }
-
-        function resetAllData() {
-            if(confirm("Are you sure? This deletes all children and history.")) {
-                state = { children: [], items: JSON.parse(JSON.stringify(DEFAULT_ITEMS)), lastSaved: Date.now() };
-                saveData();
-                render();
-                closeModal('modal-settings');
-                showToast("All data reset.");
+                // Ensure plain objects
+                const cleanState = JSON.parse(JSON.stringify(state)); 
+                await setDoc(docRef, cleanState);
+            } catch (e) {
+                console.error("Save failed", e);
             }
         }
 
+        // --- Role Checks ---
+        function isAdmin() { return currentUser && currentUser.role === 'admin'; }
+        function canAdjust() { return currentUser && (currentUser.role === 'admin' || currentUser.role === 'adjuster'); }
+
         // --- Rendering ---
         function render() {
+            if (!currentUser) return; // Wait for login
+
             const container = document.getElementById('children-container');
             const totalBalanceEl = document.getElementById('total-balance');
             const totalItemsEl = document.getElementById('total-items');
+            const totalItemsRoEl = document.getElementById('total-items-ro');
 
+            // 1. Role Based Visibility
+            const adminOnlyElements = [
+                'btn-settings', 
+                'btn-add-child', 
+                'card-store-manager'
+            ];
+            
+            adminOnlyElements.forEach(id => {
+                const el = document.getElementById(id);
+                if (isAdmin()) el.classList.remove('hidden-force');
+                else el.classList.add('hidden-force');
+            });
+
+            // Toggle Readonly Store Card
+            const roCard = document.getElementById('card-store-readonly');
+            if (!isAdmin()) roCard.classList.remove('hidden-force');
+            else roCard.classList.add('hidden-force');
+
+
+            // 2. Data Rendering
             const total = state.children.reduce((acc, c) => acc + c.balance, 0);
             totalBalanceEl.innerText = total;
             totalItemsEl.innerText = state.items.length;
+            totalItemsRoEl.innerText = state.items.length;
 
             if (state.children.length === 0) {
                 container.innerHTML = `
@@ -484,11 +616,18 @@
                     <div class="inline-block p-4 rounded-full bg-white/20 mb-3">
                         <i data-lucide="users" class="w-8 h-8 text-slate-400"></i>
                     </div>
-                    <p class="text-slate-500 font-light text-sm">No children added yet.<br>Tap "Add" to start.</p>
+                    <p class="text-slate-500 font-light text-sm">No children added yet.</p>
                 </div>`;
             } else {
                 container.innerHTML = state.children.map(child => {
                     const isBad = child.status === 'bad';
+                    
+                    // Button Visibility based on Roles
+                    const showAdjust = canAdjust() ? '' : 'hidden-force';
+                    const showLogBad = canAdjust() ? '' : 'hidden-force';
+                    const showSpend = isAdmin() ? '' : 'hidden-force'; // Only Elijah can spend/buy
+                    const showDelete = isAdmin() ? 'opacity-0 hover:opacity-100' : 'hidden-force';
+
                     return `
                     <div class="glass-panel rounded-3xl p-6 relative flex flex-col justify-between overflow-hidden transition-all hover:bg-white/40 ${isBad ? 'glass-bad-active' : ''} fade-in">
                         
@@ -512,26 +651,26 @@
                             <div class="glass-panel rounded-xl p-3 mb-6 text-center border-red-200/30">
                                 <p class="text-[10px] font-bold text-red-400 uppercase tracking-widest mb-1">Time Out</p>
                                 <p id="timer-${child.id}" class="text-lg font-mono text-red-500/80 font-medium">...</p>
-                                <button onclick="endBadMode('${child.id}')" class="text-xs text-slate-400 underline mt-2 hover:text-slate-600">End Early</button>
+                                <button onclick="endBadMode('${child.id}')" class="text-xs text-slate-400 underline mt-2 hover:text-slate-600 ${isAdmin() ? '' : 'hidden-force'}">End Early</button>
                             </div>
                         ` : ''}
 
                         <div class="grid grid-cols-3 gap-3 mt-auto">
-                            <button onclick="openAdjustModal('${child.id}')" class="glass-btn flex flex-col items-center justify-center py-3 rounded-xl">
+                            <button onclick="openAdjustModal('${child.id}')" class="${showAdjust} glass-btn flex flex-col items-center justify-center py-3 rounded-xl">
                                 <i data-lucide="sliders-horizontal" class="w-4 h-4 mb-1 opacity-70"></i>
                                 <span class="text-[10px] font-semibold uppercase tracking-wide">Adjust</span>
                             </button>
-                            <button onclick="openBadModal('${child.id}')" ${isBad ? 'disabled' : ''} class="glass-btn flex flex-col items-center justify-center py-3 rounded-xl ${isBad ? '' : 'hover:text-red-500'}">
+                            <button onclick="openBadModal('${child.id}')" ${isBad ? 'disabled' : ''} class="${showLogBad} glass-btn flex flex-col items-center justify-center py-3 rounded-xl ${isBad ? '' : 'hover:text-red-500'}">
                                 <i data-lucide="frown" class="w-4 h-4 mb-1 opacity-70"></i>
                                 <span class="text-[10px] font-semibold uppercase tracking-wide">Log Bad</span>
                             </button>
-                            <button onclick="openShopModal('${child.id}')" ${isBad ? 'disabled' : ''} class="glass-btn flex flex-col items-center justify-center py-3 rounded-xl ${isBad ? '' : 'hover:text-blue-500'}">
+                            <button onclick="openShopModal('${child.id}')" ${isBad ? 'disabled' : ''} class="${showSpend} glass-btn flex flex-col items-center justify-center py-3 rounded-xl ${isBad ? '' : 'hover:text-blue-500'}">
                                 <i data-lucide="shopping-bag" class="w-4 h-4 mb-1 opacity-70"></i>
                                 <span class="text-[10px] font-semibold uppercase tracking-wide">Spend</span>
                             </button>
                         </div>
                         
-                        <button onclick="deleteChild('${child.id}')" class="absolute top-4 right-4 p-2 text-slate-300 hover:text-red-400 transition-colors opacity-0 hover:opacity-100 group-hover:opacity-100">
+                        <button onclick="deleteChild('${child.id}')" class="absolute top-4 right-4 p-2 text-slate-300 hover:text-red-400 transition-colors ${showDelete}">
                             <i data-lucide="trash" class="w-4 h-4"></i>
                         </button>
                     </div>
@@ -558,7 +697,29 @@
             lucide.createIcons();
         }
 
-        function renderStoreManagerList() {
+        // --- Helper Fns ---
+        window.updateCountdowns = function() {
+            const now = Date.now();
+            state.children.forEach(child => {
+                if (child.status === 'bad') {
+                    const el = document.getElementById(`timer-${child.id}`);
+                    if (el) {
+                        const remaining = Math.max(0, Math.ceil((child.badUntil - now) / 1000));
+                        const m = Math.floor(remaining / 60);
+                        const s = remaining % 60;
+                        el.innerText = `${m}m ${s}s`;
+                    }
+                } else {
+                    const bar = document.getElementById(`progress-${child.id}`);
+                    if (bar) {
+                        const pct = Math.min(100, (child.earningProgress / 3600000) * 100);
+                        bar.style.width = `${pct}%`;
+                    }
+                }
+            });
+        }
+
+        window.renderStoreManagerList = function() {
             const list = document.getElementById('manager-items-list');
             list.innerHTML = state.items.map(item => `
                 <div class="flex justify-between items-center glass-panel p-3 rounded-xl">
@@ -575,7 +736,7 @@
             lucide.createIcons();
         }
 
-        function renderShopGrid(childId) {
+        window.renderShopGrid = function(childId) {
             const child = state.children.find(c => c.id === childId);
             const grid = document.getElementById('shop-items-grid');
             const nameSpan = document.getElementById('shop-child-name');
@@ -602,45 +763,60 @@
             lucide.createIcons();
         }
 
-        // --- Actions --- (Same logic as before, just triggering renders)
-        function addChild() {
+
+        // --- Actions (Window Scoped) ---
+
+        window.addChild = function() {
             const nameInput = document.getElementById('new-child-name');
             const name = nameInput.value.trim();
             if (!name) return;
             state.children.push({ id: crypto.randomUUID(), name, balance: 0, status: 'good', badUntil: null, earningProgress: 0 });
-            saveData(); nameInput.value = ''; closeModal('modal-add-child'); render(); showToast(`${name} added!`);
+            saveData(); 
+            nameInput.value = ''; 
+            closeModal('modal-add-child'); 
+            showToast(`${name} added!`);
         }
 
-        function deleteChild(id) {
-            if(confirm("Remove this child?")) { state.children = state.children.filter(c => c.id !== id); saveData(); render(); }
+        window.deleteChild = function(id) {
+            if(confirm("Remove this child?")) { 
+                state.children = state.children.filter(c => c.id !== id); 
+                saveData(); 
+            }
         }
 
-        function addStoreItem() {
+        window.addStoreItem = function() {
             const name = document.getElementById('new-item-name').value;
             const cost = document.getElementById('new-item-cost').value;
             const icon = document.getElementById('new-item-icon').value;
             if(!name || !cost) return;
             state.items.push({ id: crypto.randomUUID(), name, cost: parseInt(cost), icon });
-            saveData(); renderStoreManagerList(); render();
-            document.getElementById('new-item-name').value = ''; document.getElementById('new-item-cost').value = '';
+            saveData(); 
+            renderStoreManagerList();
+            document.getElementById('new-item-name').value = ''; 
+            document.getElementById('new-item-cost').value = '';
         }
 
-        function deleteStoreItem(id) {
-            state.items = state.items.filter(i => i.id !== id); saveData(); renderStoreManagerList(); render();
+        window.deleteStoreItem = function(id) {
+            state.items = state.items.filter(i => i.id !== id); 
+            saveData(); 
+            renderStoreManagerList();
         }
 
-        function buyItem(itemId, childId) {
+        window.buyItem = function(itemId, childId) {
             const child = state.children.find(c => c.id === childId);
             const item = state.items.find(i => i.id === itemId);
             if (child && item && child.balance >= item.cost) {
                 if(confirm(`Buy ${item.name}?`)) {
-                    child.balance -= item.cost; saveData(); closeModal('modal-shop'); render(); showToast(`${item.name} purchased!`);
+                    child.balance -= item.cost; 
+                    saveData(); 
+                    closeModal('modal-shop'); 
+                    showToast(`${item.name} purchased!`);
                 }
             }
         }
 
         let selectedBadDuration = 15;
-        function setBadTime(mins) {
+        window.setBadTime = function(mins) {
             selectedBadDuration = mins;
             document.querySelectorAll('.time-btn').forEach(btn => {
                 if(btn.innerText.includes(mins)) {
@@ -651,71 +827,86 @@
             });
         }
 
-        function confirmBadAction() {
+        window.confirmBadAction = function() {
             const id = document.getElementById('bad-child-id').value;
             const child = state.children.find(c => c.id === id);
             if(child) {
                 child.status = 'bad';
                 child.badUntil = Date.now() + (selectedBadDuration * 60000);
-                saveData(); closeModal('modal-bad'); render(); showToast(`${child.name} paused.`);
+                saveData(); 
+                closeModal('modal-bad'); 
+                showToast(`${child.name} paused.`);
             }
         }
 
-        function endBadMode(id) {
+        window.endBadMode = function(id) {
             if(confirm("End bad mode early?")) {
                 const child = state.children.find(c => c.id === id);
-                child.status = 'good'; child.badUntil = null; saveData(); render();
+                child.status = 'good'; child.badUntil = null; 
+                saveData(); 
             }
         }
 
         let adjustAmount = 0;
-        function openAdjustModal(id) {
+        window.openAdjustModal = function(id) {
             document.getElementById('adjust-child-id').value = id;
-            adjustAmount = 0; updateAdjustDisplay(); openModal('modal-adjust');
+            adjustAmount = 0; 
+            updateAdjustDisplay(); 
+            openModal('modal-adjust');
         }
 
-        function adjustValue(val) { adjustAmount += val; updateAdjustDisplay(); }
-        function updateAdjustDisplay() {
+        window.adjustValue = function(val) { adjustAmount += val; updateAdjustDisplay(); }
+        window.updateAdjustDisplay = function() {
             const el = document.getElementById('adjust-display');
             el.innerText = (adjustAmount > 0 ? '+' : '') + adjustAmount;
             el.className = `text-4xl font-light w-24 text-center ${adjustAmount > 0 ? 'text-green-600' : (adjustAmount < 0 ? 'text-red-500' : 'text-slate-700')}`;
         }
-        function confirmAdjust() {
+        window.confirmAdjust = function() {
             const id = document.getElementById('adjust-child-id').value;
             const child = state.children.find(c => c.id === id);
-            if(child && adjustAmount !== 0) { child.balance += adjustAmount; saveData(); render(); showToast(`Updated.`); }
+            if(child && adjustAmount !== 0) { 
+                child.balance += adjustAmount; 
+                saveData(); 
+                showToast(`Updated.`); 
+            }
             closeModal('modal-adjust');
+        }
+        
+        window.resetAllData = function() {
+            if(confirm("Are you sure? This deletes all children and history.")) {
+                state = { children: [], items: [], lastSaved: Date.now() };
+                saveData();
+                closeModal('modal-settings');
+                showToast("All data reset.");
+            }
         }
 
         // --- UI Utils ---
-        function openModal(id) {
+        window.openModal = function(id) {
             const el = document.getElementById(id);
             el.classList.remove('opacity-0', 'pointer-events-none');
             el.querySelector('div').classList.remove('scale-95');
             el.querySelector('div').classList.add('scale-100');
         }
-        function closeModal(id) {
+        window.closeModal = function(id) {
             const el = document.getElementById(id);
             el.classList.add('opacity-0', 'pointer-events-none');
             el.querySelector('div').classList.remove('scale-100');
             el.querySelector('div').classList.add('scale-95');
         }
 
-        function openAddChildModal() { openModal('modal-add-child'); document.getElementById('new-child-name').focus(); }
-        function openBadModal(id) { document.getElementById('bad-child-id').value = id; setBadTime(15); openModal('modal-bad'); }
-        function openShopModal(id) { renderShopGrid(id); openModal('modal-shop'); }
-        function openStoreManager() { renderStoreManagerList(); openModal('modal-store-manager'); }
-        function openSettings() { openModal('modal-settings'); }
+        window.openAddChildModal = function() { openModal('modal-add-child'); document.getElementById('new-child-name').focus(); }
+        window.openBadModal = function(id) { document.getElementById('bad-child-id').value = id; setBadTime(15); openModal('modal-bad'); }
+        window.openShopModal = function(id) { renderShopGrid(id); openModal('modal-shop'); }
+        window.openStoreManager = function() { renderStoreManagerList(); openModal('modal-store-manager'); }
+        window.openSettings = function() { openModal('modal-settings'); }
         
-        function showToast(msg) {
+        window.showToast = function(msg) {
             const t = document.getElementById('toast');
             document.getElementById('toast-message').innerText = msg;
             t.classList.remove('opacity-0', 'translate-y-4');
             setTimeout(() => t.classList.add('opacity-0', 'translate-y-4'), 3000);
         }
-
-        window.addEventListener('DOMContentLoaded', init);
-        document.addEventListener('visibilitychange', () => { if (!document.hidden) { processOfflineTime(); render(); } });
 
     </script>
 </body>
