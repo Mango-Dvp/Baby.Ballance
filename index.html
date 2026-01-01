@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Baby Ballance</title>
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background: #f4f6fb;
+    padding: 20px;
+}
+h1 {
+    text-align: center;
+}
+.section {
+    background: white;
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 8px;
+}
+input, select, button {
+    padding: 6px;
+    margin: 4px;
+}
+button {
+    cursor: pointer;
+}
+.babyCard {
+    border: 1px solid #ccc;
+    padding: 10px;
+    border-radius: 6px;
+    margin-top: 10px;
+}
+.badMode {
+    color: red;
+    font-weight: bold;
+}
+.goodMode {
+    color: green;
+    font-weight: bold;
+}
+</style>
+</head>
+<body>
+
+<h1>Baby Ballance</h1>
+
+<div class="section">
+<h2>Add Baby</h2>
+<input id="babyName" placeholder="Baby name">
+<button onclick="addBaby()">Add Baby</button>
+</div>
+
+<div class="section">
+<h2>Add Store Item</h2>
+<input id="itemName" placeholder="Item name">
+<input id="itemIcon" placeholder="Icon name">
+<input id="itemCost" type="number" placeholder="Cost">
+<button onclick="addItem()">Add Item</button>
+</div>
+
+<div class="section">
+<h2>Babies</h2>
+<div id="babyList"></div>
+</div>
+
+<div class="section">
+<h2>Store</h2>
+<div id="storeList"></div>
+</div>
+
+<script>
+const STORAGE_KEY = "babyBallanceData";
+
+let data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {
+    babies: [],
+    items: [],
+    lastTick: Date.now()
+};
+
+function save() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+function addBaby() {
+    const name = document.getElementById("babyName").value.trim();
+    if (!name) return;
+    data.babies.push({
+        id: Date.now(),
+        name,
+        bucks: 0,
+        badUntil: 0,
+        history: []
+    });
+    document.getElementById("babyName").value = "";
+    save();
+    render();
+}
+
+function removeBaby(id) {
+    data.babies = data.babies.filter(b => b.id !== id);
+    save();
+    render();
+}
+
+function addItem() {
+    const name = itemName.value.trim();
+    const icon = itemIcon.value.trim();
+    const cost = parseInt(itemCost.value);
+    if (!name || !icon || isNaN(cost)) return;
+    data.items.push({ id: Date.now(), name, icon, cost });
+    itemName.value = "";
+    itemIcon.value = "";
+    itemCost.value = "";
+    save();
+    render();
+}
+
+function spendBucks(babyId, cost) {
+    const baby = data.babies.find(b => b.id === babyId);
+    if (baby && baby.bucks >= cost) {
+        baby.bucks -= cost;
+        save();
+        render();
+    }
+}
+
+function logBad(babyId, hours) {
+    const baby = data.babies.find(b => b.id === babyId);
+    if (!baby) return;
+    const until = Date.now() + hours * 3600000;
+    baby.badUntil = Math.max(baby.badUntil, until);
+    baby.history.push({ time: Date.now(), hours });
+    save();
+    render();
+}
+
+function clearHistory(babyId) {
+    const baby = data.babies.find(b => b.id === babyId);
+    if (!baby) return;
+    baby.history = [];
+    baby.badUntil = 0;
+    save();
+    render();
+}
+
+function hourlyTick() {
+    const now = Date.now();
+    const hoursPassed = Math.floor((now - data.lastTick) / 3600000);
+    if (hoursPassed > 0) {
+        data.babies.forEach(baby => {
+            for (let i = 0; i < hoursPassed; i++) {
+                if (Date.now() > baby.badUntil) {
+                    baby.bucks += 5;
+                }
+            }
+        });
+        data.lastTick += hoursPassed * 3600000;
+        save();
+        render();
+    }
+}
+
+function render() {
+    const list = document.getElementById("babyList");
+    list.innerHTML = "";
+    data.babies.forEach(baby => {
+        const div = document.createElement("div");
+        div.className = "babyCard";
+        const bad = Date.now() < baby.badUntil;
+        div.innerHTML = `
+            <strong>${baby.name}</strong><br>
+            Baby Bucks: ${baby.bucks}<br>
+            Status: <span class="${bad ? "badMode" : "goodMode"}">
+            ${bad ? "Bad mode active" : "Good mode"}
+            </span><br><br>
+
+            Log bad action:
+            <input type="number" min="1" value="1" id="bad_${baby.id}">
+            hours
+            <button onclick="logBad(${baby.id}, document.getElementById('bad_${baby.id}').value)">Log</button>
+            <br><br>
+
+            <button onclick="clearHistory(${baby.id})">Clear History</button>
+            <button onclick="removeBaby(${baby.id})">Remove Baby</button>
+        `;
+        list.appendChild(div);
+    });
+
+    const store = document.getElementById("storeList");
+    store.innerHTML = "";
+    data.items.forEach(item => {
+        const div = document.createElement("div");
+        div.className = "babyCard";
+        div.innerHTML = `
+            ${item.icon} ${item.name} Cost ${item.cost}
+            <br>
+            ${data.babies.map(b =>
+                `<button onclick="spendBucks(${b.id}, ${item.cost})">
+                Buy for ${b.name}
+                </button>`
+            ).join("")}
+        `;
+        store.appendChild(div);
+    });
+}
+
+setInterval(hourlyTick, 60000);
+render();
+</script>
+
+</body>
+</html>
