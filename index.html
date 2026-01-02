@@ -14,11 +14,6 @@
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
 
-    <!-- Firebase SDKs -->
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"></script>
-
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -221,7 +216,7 @@
     <!-- Footer -->
     <footer class="mt-auto py-8">
         <div class="max-w-4xl mx-auto px-4 text-center">
-            <p class="text-slate-400 text-xs font-light tracking-wide">Baby Balance &copy; Cloud Sync</p>
+            <p class="text-slate-400 text-xs font-light tracking-wide">Baby Balance &copy; Local Storage</p>
         </div>
     </footer>
 
@@ -361,74 +356,73 @@
         <span id="toast-message" class="text-sm font-medium text-slate-700">Notification</span>
     </div>
 
-    <script type="module">
-        import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
-        import { getFirestore, doc, onSnapshot, setDoc, collection } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+    <script>
+        // --- Discord Config ---
+        const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1456438083791753350/X2bMYg1b-TE-vkaEUti7UPgEH8ahuWsrHLCUJR6iVJtVPhtdGX-w4EZ5iizl1EEN_rtI";
 
-        // --- Firebase Config & Init ---
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-
-        let docRef; // Reference to the single data document
+        // --- Auth State ---
         let currentUser = null; // { name: string, role: 'admin' | 'adjuster' | 'viewer' }
 
-        // --- State Management ---
+        // --- Data State ---
+        const APP_KEY = 'baby_balance_local';
         let state = {
             children: [],
             items: [],
             lastSaved: Date.now()
         };
 
-        // --- Auth & Initialization ---
-        async function initAuth() {
-            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                await signInWithCustomToken(auth, __initial_auth_token);
-            } else {
-                await signInAnonymously(auth);
+        // --- Initialization ---
+        function init() {
+            loadData();
+            
+            // Migration
+            if (!state.items) state.items = [];
+            if (!state.children) state.children = [];
+            
+            processOfflineTime();
+            render(); // Initial Render (empty until login)
+            lucide.createIcons();
+            
+            // Start Game Loop
+            setInterval(gameLoop, 1000);
+        }
+
+        // --- Discord Helper ---
+        function logToDiscord(message) {
+            // Prevent spamming empty messages
+            if (!message) return;
+
+            // Simple fire-and-forget fetch
+            fetch(DISCORD_WEBHOOK_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ content: message })
+            }).catch(err => console.error("Discord Log Error:", err));
+        }
+
+        // --- Local Storage Logic ---
+        function loadData() {
+            try {
+                const stored = localStorage.getItem(APP_KEY);
+                if (stored) {
+                    state = JSON.parse(stored);
+                    // Ensure defaults
+                    state.children.forEach(c => {
+                        if (typeof c.earningProgress === 'undefined') c.earningProgress = 0;
+                    });
+                }
+            } catch (e) {
+                console.error("Failed to load data", e);
             }
         }
 
-        initAuth();
-
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                // Setup Database Reference
-                docRef = doc(db, 'artifacts', appId, 'public', 'data', 'family_store');
-                
-                // Start Listening to Data
-                onSnapshot(docRef, (docSnap) => {
-                    if (docSnap.exists()) {
-                        const data = docSnap.data();
-                        // Merge logic: keep local UI state if needed, but here we just sync
-                        state = data;
-                        
-                        // Handle migration for earningProgress
-                        state.children.forEach(c => {
-                            if (typeof c.earningProgress === 'undefined') c.earningProgress = 0;
-                        });
-                        
-                        processOfflineTime(); // Recalc time based on new data
-                        render();
-                    } else {
-                        // First time run, create doc
-                        saveData();
-                    }
-                }, (error) => {
-                    console.error("Data sync error:", error);
-                    showToast("Sync Error. Check connection.");
-                });
-
-                // Start Game Loop
-                setInterval(gameLoop, 1000);
-            }
-        });
+        function saveData() {
+            state.lastSaved = Date.now();
+            localStorage.setItem(APP_KEY, JSON.stringify(state));
+        }
 
         // --- Application Login Logic ---
-        window.checkLoginName = function() {
+        function checkLoginName() {
             const name = document.getElementById('login-name').value.trim().toLowerCase();
             const pinContainer = document.getElementById('pin-container');
             
@@ -442,7 +436,7 @@
             }
         }
 
-        window.attemptLogin = function() {
+        function attemptLogin() {
             const nameInput = document.getElementById('login-name').value.trim();
             const nameLower = nameInput.toLowerCase();
             const pin = document.getElementById('login-pin').value;
@@ -469,12 +463,15 @@
             document.getElementById('current-user-badge').innerText = `${currentUser.name} • ${role === 'admin' ? 'Admin' : (role === 'adjuster' ? 'Parent' : 'Viewer')}`;
             document.getElementById('modal-login').classList.add('opacity-0', 'pointer-events-none');
             
-            // Re-render to show/hide buttons based on role
+            // Log Login
+            logToDiscord(`🔐 **${currentUser.name}** logged in.`);
+
+            // Re-render
             render();
             showToast(`Welcome, ${currentUser.name}!`);
         }
 
-        window.logout = function() {
+        function logout() {
             currentUser = null;
             document.getElementById('login-name').value = '';
             document.getElementById('login-pin').value = '';
@@ -486,8 +483,7 @@
         function processOfflineTime() {
             const now = Date.now();
             const lastSaved = state.lastSaved || now;
-            let changed = false;
-
+            
             state.children.forEach(child => {
                 if (!child.earningProgress) child.earningProgress = 0;
 
@@ -497,36 +493,23 @@
                         child.status = 'good';
                         child.badUntil = null;
                         if (timeInGood > 0) child.earningProgress += timeInGood;
-                        changed = true;
                     }
                 } else {
                     const timeElapsed = now - lastSaved;
                     child.earningProgress += timeElapsed;
-                    changed = true;
                 }
 
                 const ONE_HOUR_MS = 3600000;
                 while (child.earningProgress >= ONE_HOUR_MS) {
                     child.balance += 5;
                     child.earningProgress -= ONE_HOUR_MS;
-                    changed = true;
                 }
             });
-
-            if (changed) {
-                // We don't save immediately here to avoid write loops with onSnapshot
-                // Instead, we just update local state, and gameLoop will eventually save if needed
-                // OR we save only if we are the "active" tab. For simplicity, we just save.
-                // Note: To prevent loops, we check logic in render/loop. 
-                // But for offline catchup, we should save once.
-                state.lastSaved = now;
-                saveData();
-            }
+            saveData();
         }
 
         function gameLoop() {
             const now = Date.now();
-            let needsSave = false;
             let needsRender = false;
 
             state.children.forEach(child => {
@@ -535,7 +518,7 @@
                         child.status = 'good';
                         child.badUntil = null;
                         showToast(`${child.name} is back in Good Mode!`);
-                        needsSave = true;
+                        logToDiscord(`✅ **${child.name}** is back in Good Mode automatically.`);
                         needsRender = true;
                     }
                 } else if (child.status === 'good') {
@@ -545,31 +528,15 @@
                         child.balance += 5;
                         child.earningProgress -= ONE_HOUR_MS;
                         showToast(`${child.name} earned 5 Baby Bucks!`);
-                        needsSave = true;
+                        // No log for hourly earnings to avoid spam
                         needsRender = true;
                     }
                 }
             });
 
-            // Only save periodically or on significant events to save writes
-            if (needsSave || (Date.now() - state.lastSaved > 60000)) {
-                state.lastSaved = now;
-                saveData();
-            }
-            
+            saveData(); // Frequent Save for timer accuracy
             updateCountdowns();
             if (needsRender) render();
-        }
-
-        async function saveData() {
-            if (!docRef) return;
-            try {
-                // Ensure plain objects
-                const cleanState = JSON.parse(JSON.stringify(state)); 
-                await setDoc(docRef, cleanState);
-            } catch (e) {
-                console.error("Save failed", e);
-            }
         }
 
         // --- Role Checks ---
@@ -698,7 +665,7 @@
         }
 
         // --- Helper Fns ---
-        window.updateCountdowns = function() {
+        function updateCountdowns() {
             const now = Date.now();
             state.children.forEach(child => {
                 if (child.status === 'bad') {
@@ -719,7 +686,7 @@
             });
         }
 
-        window.renderStoreManagerList = function() {
+        function renderStoreManagerList() {
             const list = document.getElementById('manager-items-list');
             list.innerHTML = state.items.map(item => `
                 <div class="flex justify-between items-center glass-panel p-3 rounded-xl">
@@ -736,7 +703,7 @@
             lucide.createIcons();
         }
 
-        window.renderShopGrid = function(childId) {
+        function renderShopGrid(childId) {
             const child = state.children.find(c => c.id === childId);
             const grid = document.getElementById('shop-items-grid');
             const nameSpan = document.getElementById('shop-child-name');
@@ -766,7 +733,7 @@
 
         // --- Actions (Window Scoped) ---
 
-        window.addChild = function() {
+        function addChild() {
             const nameInput = document.getElementById('new-child-name');
             const name = nameInput.value.trim();
             if (!name) return;
@@ -775,16 +742,21 @@
             nameInput.value = ''; 
             closeModal('modal-add-child'); 
             showToast(`${name} added!`);
+            logToDiscord(`👶 **New Sibling:** ${name} was added by ${currentUser.name}.`);
+            render();
         }
 
-        window.deleteChild = function(id) {
+        function deleteChild(id) {
             if(confirm("Remove this child?")) { 
+                const child = state.children.find(c => c.id === id);
+                logToDiscord(`🗑️ **Deleted:** ${child ? child.name : 'Unknown'} was removed by ${currentUser.name}.`);
                 state.children = state.children.filter(c => c.id !== id); 
                 saveData(); 
+                render();
             }
         }
 
-        window.addStoreItem = function() {
+        function addStoreItem() {
             const name = document.getElementById('new-item-name').value;
             const cost = document.getElementById('new-item-cost').value;
             const icon = document.getElementById('new-item-icon').value;
@@ -792,17 +764,20 @@
             state.items.push({ id: crypto.randomUUID(), name, cost: parseInt(cost), icon });
             saveData(); 
             renderStoreManagerList();
+            render();
             document.getElementById('new-item-name').value = ''; 
             document.getElementById('new-item-cost').value = '';
+            // No log for adding items, maybe minor
         }
 
-        window.deleteStoreItem = function(id) {
+        function deleteStoreItem(id) {
             state.items = state.items.filter(i => i.id !== id); 
             saveData(); 
             renderStoreManagerList();
+            render();
         }
 
-        window.buyItem = function(itemId, childId) {
+        function buyItem(itemId, childId) {
             const child = state.children.find(c => c.id === childId);
             const item = state.items.find(i => i.id === itemId);
             if (child && item && child.balance >= item.cost) {
@@ -811,12 +786,14 @@
                     saveData(); 
                     closeModal('modal-shop'); 
                     showToast(`${item.name} purchased!`);
+                    logToDiscord(`🛍️ **Purchase:** ${child.name} bought **${item.name}** for ${item.cost} Bucks.`);
+                    render();
                 }
             }
         }
 
         let selectedBadDuration = 15;
-        window.setBadTime = function(mins) {
+        function setBadTime(mins) {
             selectedBadDuration = mins;
             document.querySelectorAll('.time-btn').forEach(btn => {
                 if(btn.innerText.includes(mins)) {
@@ -827,7 +804,7 @@
             });
         }
 
-        window.confirmBadAction = function() {
+        function confirmBadAction() {
             const id = document.getElementById('bad-child-id').value;
             const child = state.children.find(c => c.id === id);
             if(child) {
@@ -836,77 +813,88 @@
                 saveData(); 
                 closeModal('modal-bad'); 
                 showToast(`${child.name} paused.`);
+                logToDiscord(`🛑 **Action Logged:** ${child.name} put in bad mode for ${selectedBadDuration}m by ${currentUser.name}.`);
+                render();
             }
         }
 
-        window.endBadMode = function(id) {
+        function endBadMode(id) {
             if(confirm("End bad mode early?")) {
                 const child = state.children.find(c => c.id === id);
                 child.status = 'good'; child.badUntil = null; 
                 saveData(); 
+                logToDiscord(`🔓 **Forgiven:** ${child.name}'s bad mode was ended early by ${currentUser.name}.`);
+                render();
             }
         }
 
         let adjustAmount = 0;
-        window.openAdjustModal = function(id) {
+        function openAdjustModal(id) {
             document.getElementById('adjust-child-id').value = id;
             adjustAmount = 0; 
             updateAdjustDisplay(); 
             openModal('modal-adjust');
         }
 
-        window.adjustValue = function(val) { adjustAmount += val; updateAdjustDisplay(); }
-        window.updateAdjustDisplay = function() {
+        function adjustValue(val) { adjustAmount += val; updateAdjustDisplay(); }
+        function updateAdjustDisplay() {
             const el = document.getElementById('adjust-display');
             el.innerText = (adjustAmount > 0 ? '+' : '') + adjustAmount;
             el.className = `text-4xl font-light w-24 text-center ${adjustAmount > 0 ? 'text-green-600' : (adjustAmount < 0 ? 'text-red-500' : 'text-slate-700')}`;
         }
-        window.confirmAdjust = function() {
+        function confirmAdjust() {
             const id = document.getElementById('adjust-child-id').value;
             const child = state.children.find(c => c.id === id);
             if(child && adjustAmount !== 0) { 
                 child.balance += adjustAmount; 
                 saveData(); 
                 showToast(`Updated.`); 
+                logToDiscord(`⚖️ **Adjust:** ${child.name}'s balance changed by ${adjustAmount} (New: ${child.balance}) by ${currentUser.name}.`);
+                render();
             }
             closeModal('modal-adjust');
         }
         
-        window.resetAllData = function() {
+        function resetAllData() {
             if(confirm("Are you sure? This deletes all children and history.")) {
                 state = { children: [], items: [], lastSaved: Date.now() };
                 saveData();
                 closeModal('modal-settings');
                 showToast("All data reset.");
+                logToDiscord(`⚠️ **RESET:** All family data was wiped by ${currentUser.name}.`);
+                render();
             }
         }
 
         // --- UI Utils ---
-        window.openModal = function(id) {
+        function openModal(id) {
             const el = document.getElementById(id);
             el.classList.remove('opacity-0', 'pointer-events-none');
             el.querySelector('div').classList.remove('scale-95');
             el.querySelector('div').classList.add('scale-100');
         }
-        window.closeModal = function(id) {
+        function closeModal(id) {
             const el = document.getElementById(id);
             el.classList.add('opacity-0', 'pointer-events-none');
             el.querySelector('div').classList.remove('scale-100');
             el.querySelector('div').classList.add('scale-95');
         }
 
-        window.openAddChildModal = function() { openModal('modal-add-child'); document.getElementById('new-child-name').focus(); }
-        window.openBadModal = function(id) { document.getElementById('bad-child-id').value = id; setBadTime(15); openModal('modal-bad'); }
-        window.openShopModal = function(id) { renderShopGrid(id); openModal('modal-shop'); }
-        window.openStoreManager = function() { renderStoreManagerList(); openModal('modal-store-manager'); }
-        window.openSettings = function() { openModal('modal-settings'); }
+        function openAddChildModal() { openModal('modal-add-child'); document.getElementById('new-child-name').focus(); }
+        function openBadModal(id) { document.getElementById('bad-child-id').value = id; setBadTime(15); openModal('modal-bad'); }
+        function openShopModal(id) { renderShopGrid(id); openModal('modal-shop'); }
+        function openStoreManager() { renderStoreManagerList(); openModal('modal-store-manager'); }
+        function openSettings() { openModal('modal-settings'); }
         
-        window.showToast = function(msg) {
+        function showToast(msg) {
             const t = document.getElementById('toast');
             document.getElementById('toast-message').innerText = msg;
             t.classList.remove('opacity-0', 'translate-y-4');
             setTimeout(() => t.classList.add('opacity-0', 'translate-y-4'), 3000);
         }
+
+        // Initialize App
+        window.addEventListener('DOMContentLoaded', init);
 
     </script>
 </body>
