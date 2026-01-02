@@ -103,6 +103,13 @@
         .hidden-force { display: none !important; }
         .fade-in { animation: fadeIn 0.4s ease-out forwards; opacity: 0; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Remove arrows from number input */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
 
     </style>
 </head>
@@ -294,10 +301,13 @@
             <h3 class="text-lg font-medium text-slate-800 mb-6 text-center">Manual Adjustment</h3>
             <input type="hidden" id="adjust-child-id">
             
-            <div class="flex items-center justify-center gap-6 mb-4">
-                <button onclick="adjustValue(-1)" class="w-12 h-12 rounded-full glass-btn flex items-center justify-center"><i data-lucide="minus" class="w-5 h-5"></i></button>
-                <div class="text-4xl font-light text-slate-700 w-24 text-center" id="adjust-display">0</div>
-                <button onclick="adjustValue(1)" class="w-12 h-12 rounded-full glass-btn flex items-center justify-center"><i data-lucide="plus" class="w-5 h-5"></i></button>
+            <div class="flex items-center justify-center gap-4 mb-4">
+                <button onclick="adjustValue(-1)" class="w-10 h-10 rounded-full glass-btn flex items-center justify-center flex-shrink-0"><i data-lucide="minus" class="w-4 h-4"></i></button>
+                
+                <!-- NEW: Input Field -->
+                <input type="number" id="adjust-input" value="0" class="text-4xl font-light text-slate-700 w-32 text-center bg-transparent focus:outline-none border-b-2 border-transparent focus:border-slate-300 transition-all placeholder-slate-300">
+                
+                <button onclick="adjustValue(1)" class="w-10 h-10 rounded-full glass-btn flex items-center justify-center flex-shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
             </div>
 
             <!-- Reason Input -->
@@ -434,11 +444,14 @@
 
             document.getElementById('setting-rate').value = state.hourlyRate;
             
-            processOfflineTime();
+            // Just ensure initial timing calculation happened
+            // gameLoop will handle continuous time deltas
+            
             render(); 
             lucide.createIcons();
             
-            setInterval(gameLoop, 1000);
+            // Start Loop
+            setInterval(gameLoop, 1000); // UI update rate
         }
 
         // --- Logging & Undo ---
@@ -574,107 +587,76 @@
             document.getElementById('modal-login').classList.remove('opacity-0', 'pointer-events-none');
         }
 
-        // --- Core Logic ---
-        function processOfflineTime() {
-            const now = Date.now();
-            const lastSaved = state.lastSaved || now;
-            const elapsed = now - lastSaved;
-            
-            state.children.forEach(child => {
-                if (!child.earningProgress) child.earningProgress = 0;
-                
-                // Process Active Activities - Only deduct time if not paused?
-                // For simplicity, we assume activities pause if app closes, or we simply don't deduct offline time from them
-                // to avoid them expiring instantly on load. 
-                // Let's DEDUCT elapsed time from unpaused activities
-                if (child.activities) {
-                    child.activities.forEach(act => {
-                        if(!act.isPaused) {
-                            act.timeLeft = Math.max(0, act.timeLeft - elapsed);
-                        }
-                    });
-                    // Cleanup finished
-                    child.activities = child.activities.filter(a => a.timeLeft > 0);
-                }
-
-                // If paused manually, no earning happened
-                if (child.isPaused) return;
-
-                if (child.status === 'bad' && child.badUntil) {
-                    if (child.badUntil <= now) {
-                        const timeInGood = now - child.badUntil;
-                        child.status = 'good';
-                        child.badUntil = null;
-                        if (timeInGood > 0) child.earningProgress += timeInGood;
-                    }
-                } else {
-                    const timeElapsed = now - lastSaved;
-                    child.earningProgress += timeElapsed;
-                }
-
-                const ONE_HOUR_MS = 3600000;
-                while (child.earningProgress >= ONE_HOUR_MS) {
-                    child.balance += state.hourlyRate;
-                    child.earningProgress -= ONE_HOUR_MS;
-                }
-            });
-            saveData();
-        }
+        // --- Core Logic (Delta Time) ---
+        // We use state.lastSaved as the "last tick" time.
+        // This unifies "app open loop" and "app closed time travel" into one logic.
+        // The game loop simply calculates (Now - LastSaved) and applies it.
+        // This handles background tabs automatically because (Now - LastSaved) will just be a bigger number.
 
         function gameLoop() {
             const now = Date.now();
-            let needsRender = false;
+            // Calculate time passed since last update (or last save if closed)
+            // Ensure we don't process negative time (clock drift protection)
+            let deltaTime = Math.max(0, now - state.lastSaved); 
+            
+            // Only update if time has actually passed (prevents unnecessary calcs)
+            if (deltaTime > 0) {
+                let needsRender = false;
 
-            state.children.forEach(child => {
-                // Update Activities
-                if (child.activities && child.activities.length > 0) {
-                    let activityChanged = false;
-                    child.activities.forEach(act => {
-                        if (!act.isPaused) {
-                            act.timeLeft -= 1000;
-                            // Update display specifically if needed, but render handles it
+                state.children.forEach(child => {
+                    // 1. Process Activities
+                    if (child.activities && child.activities.length > 0) {
+                        child.activities.forEach(act => {
+                            if (!act.isPaused) {
+                                act.timeLeft = Math.max(0, act.timeLeft - deltaTime);
+                            }
+                        });
+                        
+                        // Check for completion
+                        const activeCount = child.activities.length;
+                        child.activities = child.activities.filter(a => a.timeLeft > 0);
+                        if (child.activities.length !== activeCount) {
+                            showToast("Activity Finished!");
+                            needsRender = true;
                         }
-                    });
-                    
-                    // Filter out finished activities
-                    const activeCount = child.activities.length;
-                    child.activities = child.activities.filter(a => a.timeLeft > 0);
-                    if (child.activities.length !== activeCount) {
-                        showToast("Activity Finished!");
-                        needsRender = true;
-                        activityChanged = true;
+                        
+                        // Show visible countdown updates
+                        if (activeCount > 0) needsRender = true;
                     }
-                    
-                    // Always re-render if active activities exist to show countdown
-                    if (activeCount > 0) needsRender = true;
-                }
 
-                // If Manually Paused, skip earning
-                if (child.isPaused) return;
-
-                if (child.status === 'bad' && child.badUntil) {
-                    if (now >= child.badUntil) {
-                        child.status = 'good';
-                        child.badUntil = null;
-                        showToast(`${child.name} is back in Good Mode!`);
-                        addLog(child.name, 'Status', 'Returned to Good Mode');
-                        needsRender = true;
+                    // 2. Process Bad Mode & Earning
+                    if (!child.isPaused) {
+                        if (child.status === 'bad' && child.badUntil) {
+                            if (now >= child.badUntil) {
+                                child.status = 'good';
+                                child.badUntil = null;
+                                showToast(`${child.name} is back in Good Mode!`);
+                                addLog(child.name, 'Status', 'Returned to Good Mode');
+                                needsRender = true;
+                            }
+                        } else if (child.status === 'good') {
+                            // Accumulate time
+                            child.earningProgress += deltaTime;
+                            
+                            const ONE_HOUR_MS = 3600000;
+                            // Check for payout(s) - handle multiple hours if tab closed for long time
+                            while (child.earningProgress >= ONE_HOUR_MS) {
+                                child.balance += state.hourlyRate;
+                                child.earningProgress -= ONE_HOUR_MS;
+                                showToast(`${child.name} earned ${state.hourlyRate} Bucks!`);
+                                needsRender = true;
+                            }
+                        }
                     }
-                } else if (child.status === 'good') {
-                    child.earningProgress += 1000;
-                    const ONE_HOUR_MS = 3600000;
-                    if (child.earningProgress >= ONE_HOUR_MS) {
-                        child.balance += state.hourlyRate;
-                        child.earningProgress -= ONE_HOUR_MS;
-                        showToast(`${child.name} earned ${state.hourlyRate} Bucks!`);
-                        needsRender = true;
-                    }
-                }
-            });
+                });
 
-            saveData();
-            updateTimers();
-            if (needsRender) render();
+                // Commit time update
+                state.lastSaved = now;
+                saveData(); 
+                
+                updateTimers(); // Visual update for sub-second/second changes
+                if (needsRender) render();
+            }
         }
 
         // --- Activity Logic ---
@@ -1243,29 +1225,35 @@
         let adjustAmount = 0;
         function openAdjustModal(id) {
             document.getElementById('adjust-child-id').value = id;
-            document.getElementById('adjust-reason').value = ''; // Clear reason
+            document.getElementById('adjust-reason').value = ''; 
+            document.getElementById('adjust-input').value = 0; // Reset input
             adjustAmount = 0; 
-            updateAdjustDisplay(); 
+            // updateAdjustDisplay(); // No longer needed with input field
             openModal('modal-adjust');
         }
 
-        function adjustValue(val) { adjustAmount += val; updateAdjustDisplay(); }
-        function updateAdjustDisplay() {
-            const el = document.getElementById('adjust-display');
-            el.innerText = (adjustAmount > 0 ? '+' : '') + adjustAmount;
-            el.className = `text-4xl font-light w-24 text-center ${adjustAmount > 0 ? 'text-green-600' : (adjustAmount < 0 ? 'text-red-500' : 'text-slate-700')}`;
+        function adjustValue(val) { 
+            const input = document.getElementById('adjust-input');
+            let current = parseInt(input.value) || 0;
+            current += val;
+            input.value = current;
+            adjustAmount = current;
         }
         
         function confirmAdjust() {
             const id = document.getElementById('adjust-child-id').value;
             const reason = document.getElementById('adjust-reason').value.trim() || 'No reason provided';
+            
+            // Read from INPUT
+            const finalAmount = parseInt(document.getElementById('adjust-input').value);
+            
             const child = state.children.find(c => c.id === id);
             
-            if(child && adjustAmount !== 0) { 
-                child.balance += adjustAmount; 
+            if(child && finalAmount !== 0) { 
+                child.balance += finalAmount; 
                 saveData(); 
                 showToast(`Updated.`); 
-                addLog(child.name, 'Adjustment', `${adjustAmount > 0 ? '+' : ''}${adjustAmount} (Reason: ${reason})`, { type: 'adjustment', amount: adjustAmount, childId: child.id });
+                addLog(child.name, 'Adjustment', `${finalAmount > 0 ? '+' : ''}${finalAmount} (Reason: ${reason})`, { type: 'adjustment', amount: finalAmount, childId: child.id });
                 render();
             }
             closeModal('modal-adjust');
