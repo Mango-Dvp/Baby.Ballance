@@ -690,7 +690,19 @@
 
         function endActivity(childId, actId) {
             const child = state.children.find(c => c.id === childId);
-            if (confirm("End/Delete this activity?")) {
+            const act = child.activities.find(a => a.id === actId);
+            
+            if (act && confirm("Finish and log this activity?")) {
+                // Log the completion
+                const totalSecs = Math.ceil(act.timeLeft / 1000);
+                const h = Math.floor(totalSecs / 3600);
+                const m = Math.floor((totalSecs % 3600) / 60);
+                const s = totalSecs % 60;
+                const timeStr = `${h > 0 ? h+'h ' : ''}${m}m ${s}s`;
+                
+                addLog(child.name, 'Activity Ended', `Finished '${act.name}' (Remaining: ${timeStr})`);
+                
+                // Remove from active list
                 child.activities = child.activities.filter(a => a.id !== actId);
                 saveData();
                 render();
