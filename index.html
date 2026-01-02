@@ -285,11 +285,16 @@
             <h3 class="text-lg font-medium text-slate-800 mb-6 text-center">Manual Adjustment</h3>
             <input type="hidden" id="adjust-child-id">
             
-            <div class="flex items-center justify-center gap-6 mb-8">
+            <div class="flex items-center justify-center gap-6 mb-4">
                 <button onclick="adjustValue(-1)" class="w-12 h-12 rounded-full glass-btn flex items-center justify-center"><i data-lucide="minus" class="w-5 h-5"></i></button>
                 <div class="text-4xl font-light text-slate-700 w-24 text-center" id="adjust-display">0</div>
                 <button onclick="adjustValue(1)" class="w-12 h-12 rounded-full glass-btn flex items-center justify-center"><i data-lucide="plus" class="w-5 h-5"></i></button>
             </div>
+
+            <!-- Reason Input -->
+             <div class="mb-6">
+                 <input type="text" id="adjust-reason" placeholder="Reason (e.g. Chores, Bad Grades)" class="glass-input w-full rounded-xl px-4 py-2 text-sm text-center">
+             </div>
             
             <div class="flex gap-4">
                 <button onclick="closeModal('modal-adjust')" class="flex-1 py-3 glass-btn rounded-xl font-medium">Cancel</button>
@@ -297,6 +302,21 @@
             </div>
         </div>
     </div>
+
+    <!-- History Modal -->
+    <div id="modal-history" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-200/20 backdrop-blur-sm opacity-0 pointer-events-none transition-all duration-300">
+        <div class="glass-panel rounded-3xl w-full max-w-lg mx-6 p-0 shadow-2xl overflow-hidden flex flex-col max-h-[70vh]">
+            <div class="p-6 border-b border-white/30 flex justify-between items-center">
+                <h3 class="text-lg font-medium text-slate-800">History Log</h3>
+                <button onclick="closeModal('modal-history')" class="glass-btn p-2 rounded-full"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
+            
+            <div id="history-list" class="p-6 overflow-y-auto space-y-3">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+    </div>
+
 
     <!-- Store Manager Modal -->
     <div id="modal-store-manager" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-200/20 backdrop-blur-sm opacity-0 pointer-events-none transition-all duration-300">
@@ -339,6 +359,14 @@
     <div id="modal-settings" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-200/20 backdrop-blur-sm opacity-0 pointer-events-none transition-all duration-300">
         <div class="glass-panel rounded-3xl w-full max-w-sm mx-6 p-8 shadow-2xl text-center">
             <h3 class="text-lg font-medium text-slate-800 mb-8">Settings</h3>
+
+            <div class="mb-6 text-left">
+                <label class="text-xs font-bold text-slate-400 uppercase tracking-wide block mb-2">Hourly Payment Rate</label>
+                <div class="flex gap-2">
+                    <input type="number" id="setting-rate" class="glass-input w-full rounded-xl px-4 py-2" value="10">
+                    <button onclick="updateRate()" class="glass-btn px-4 rounded-xl text-sm">Save</button>
+                </div>
+            </div>
             
             <button onclick="resetAllData()" class="w-full py-3 glass-btn rounded-xl text-red-500 hover:text-red-600 font-medium flex items-center justify-center gap-2 mb-4">
                 <i data-lucide="trash-2" class="w-4 h-4"></i> Reset All Data
@@ -361,13 +389,15 @@
         const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1456438083791753350/X2bMYg1b-TE-vkaEUti7UPgEH8ahuWsrHLCUJR6iVJtVPhtdGX-w4EZ5iizl1EEN_rtI";
 
         // --- Auth State ---
-        let currentUser = null; // { name: string, role: 'admin' | 'adjuster' | 'viewer' }
+        let currentUser = null; 
 
         // --- Data State ---
         const APP_KEY = 'baby_balance_local';
         let state = {
             children: [],
             items: [],
+            logs: [], // New: Log history
+            hourlyRate: 10, // New: Default to 10
             lastSaved: Date.now()
         };
 
@@ -378,21 +408,43 @@
             // Migration
             if (!state.items) state.items = [];
             if (!state.children) state.children = [];
+            if (!state.logs) state.logs = [];
+            if (!state.hourlyRate) state.hourlyRate = 10;
+            
+            // Ensure children have 'paused' property separate from bad mode
+            state.children.forEach(c => {
+                if(typeof c.isPaused === 'undefined') c.isPaused = false;
+            });
+
+            document.getElementById('setting-rate').value = state.hourlyRate;
             
             processOfflineTime();
-            render(); // Initial Render (empty until login)
+            render(); 
             lucide.createIcons();
             
-            // Start Game Loop
             setInterval(gameLoop, 1000);
         }
 
-        // --- Discord Helper ---
-        function logToDiscord(message) {
-            // Prevent spamming empty messages
-            if (!message) return;
+        // --- Logging ---
+        function addLog(childName, action, details) {
+            const entry = {
+                id: crypto.randomUUID(),
+                date: Date.now(),
+                child: childName,
+                action: action,
+                details: details,
+                user: currentUser ? currentUser.name : 'System'
+            };
+            state.logs.unshift(entry); // Add to top
+            // Keep log size managed
+            if (state.logs.length > 100) state.logs.pop(); 
+            
+            // Send to Discord as well
+            logToDiscord(`${action} - ${childName}: ${details} (by ${entry.user})`);
+        }
 
-            // Simple fire-and-forget fetch
+        function logToDiscord(message) {
+            if (!message) return;
             fetch(DISCORD_WEBHOOK_URL, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -406,14 +458,11 @@
                 const stored = localStorage.getItem(APP_KEY);
                 if (stored) {
                     state = JSON.parse(stored);
-                    // Ensure defaults
                     state.children.forEach(c => {
                         if (typeof c.earningProgress === 'undefined') c.earningProgress = 0;
                     });
                 }
-            } catch (e) {
-                console.error("Failed to load data", e);
-            }
+            } catch (e) { console.error("Failed to load data", e); }
         }
 
         function saveData() {
@@ -421,11 +470,10 @@
             localStorage.setItem(APP_KEY, JSON.stringify(state));
         }
 
-        // --- Application Login Logic ---
+        // --- Auth Logic ---
         function checkLoginName() {
             const name = document.getElementById('login-name').value.trim().toLowerCase();
             const pinContainer = document.getElementById('pin-container');
-            
             if (name === 'elijah') {
                 pinContainer.classList.remove('hidden-force');
                 pinContainer.classList.remove('h-0', 'opacity-0');
@@ -440,33 +488,19 @@
             const nameInput = document.getElementById('login-name').value.trim();
             const nameLower = nameInput.toLowerCase();
             const pin = document.getElementById('login-pin').value;
-
             if (!nameInput) return;
 
             let role = 'viewer';
-
             if (nameLower === 'elijah') {
-                if (pin === '1912') {
-                    role = 'admin';
-                } else {
-                    alert("Incorrect PIN for Elijah.");
-                    return;
-                }
+                if (pin === '1912') role = 'admin';
+                else { alert("Incorrect PIN for Elijah."); return; }
             } else if (nameLower === 'lacey' || nameLower === 'chris') {
                 role = 'adjuster';
             }
 
-            // Set User
             currentUser = { name: nameInput, role: role };
-            
-            // UI Update
             document.getElementById('current-user-badge').innerText = `${currentUser.name} • ${role === 'admin' ? 'Admin' : (role === 'adjuster' ? 'Parent' : 'Viewer')}`;
             document.getElementById('modal-login').classList.add('opacity-0', 'pointer-events-none');
-            
-            // Log Login
-            logToDiscord(`🔐 **${currentUser.name}** logged in.`);
-
-            // Re-render
             render();
             showToast(`Welcome, ${currentUser.name}!`);
         }
@@ -486,6 +520,9 @@
             
             state.children.forEach(child => {
                 if (!child.earningProgress) child.earningProgress = 0;
+                
+                // If paused manually, no earning happened
+                if (child.isPaused) return;
 
                 if (child.status === 'bad' && child.badUntil) {
                     if (child.badUntil <= now) {
@@ -501,7 +538,7 @@
 
                 const ONE_HOUR_MS = 3600000;
                 while (child.earningProgress >= ONE_HOUR_MS) {
-                    child.balance += 5;
+                    child.balance += state.hourlyRate;
                     child.earningProgress -= ONE_HOUR_MS;
                 }
             });
@@ -513,127 +550,180 @@
             let needsRender = false;
 
             state.children.forEach(child => {
+                // If Manually Paused, skip everything
+                if (child.isPaused) return;
+
                 if (child.status === 'bad' && child.badUntil) {
                     if (now >= child.badUntil) {
                         child.status = 'good';
                         child.badUntil = null;
                         showToast(`${child.name} is back in Good Mode!`);
-                        logToDiscord(`✅ **${child.name}** is back in Good Mode automatically.`);
+                        addLog(child.name, 'Status', 'Returned to Good Mode');
                         needsRender = true;
                     }
                 } else if (child.status === 'good') {
                     child.earningProgress += 1000;
                     const ONE_HOUR_MS = 3600000;
                     if (child.earningProgress >= ONE_HOUR_MS) {
-                        child.balance += 5;
+                        child.balance += state.hourlyRate;
                         child.earningProgress -= ONE_HOUR_MS;
-                        showToast(`${child.name} earned 5 Baby Bucks!`);
-                        // No log for hourly earnings to avoid spam
+                        showToast(`${child.name} earned ${state.hourlyRate} Bucks!`);
                         needsRender = true;
                     }
                 }
             });
 
-            saveData(); // Frequent Save for timer accuracy
-            updateCountdowns();
+            saveData();
+            updateTimers();
             if (needsRender) render();
         }
 
-        // --- Role Checks ---
+        // --- Render Helpers ---
+        function updateTimers() {
+            const now = Date.now();
+            const ONE_HOUR_MS = 3600000;
+            
+            state.children.forEach(child => {
+                // Bad Timer
+                if (child.status === 'bad') {
+                    const el = document.getElementById(`timer-${child.id}`);
+                    if (el) {
+                        const remaining = Math.max(0, Math.ceil((child.badUntil - now) / 1000));
+                        const m = Math.floor(remaining / 60);
+                        const s = remaining % 60;
+                        el.innerText = `${m}m ${s}s`;
+                    }
+                } 
+                
+                // Next Payment Timer
+                const payTimerEl = document.getElementById(`pay-timer-${child.id}`);
+                if (payTimerEl) {
+                    if(child.status === 'bad' || child.isPaused) {
+                         payTimerEl.innerText = "Paused";
+                         payTimerEl.className = "text-xs font-mono font-bold text-slate-400";
+                    } else {
+                        const msLeft = ONE_HOUR_MS - child.earningProgress;
+                        const secLeft = Math.ceil(msLeft / 1000);
+                        const m = Math.floor(secLeft / 60);
+                        const s = secLeft % 60;
+                        payTimerEl.innerText = `${m}m ${s}s`;
+                        payTimerEl.className = "text-xs font-mono font-bold text-green-600";
+                    }
+                }
+
+                // Progress Bar (Visual)
+                const bar = document.getElementById(`progress-${child.id}`);
+                if (bar) {
+                    const pct = Math.min(100, (child.earningProgress / ONE_HOUR_MS) * 100);
+                    bar.style.width = `${pct}%`;
+                }
+            });
+        }
+
         function isAdmin() { return currentUser && currentUser.role === 'admin'; }
         function canAdjust() { return currentUser && (currentUser.role === 'admin' || currentUser.role === 'adjuster'); }
 
-        // --- Rendering ---
         function render() {
-            if (!currentUser) return; // Wait for login
+            if (!currentUser) return;
 
             const container = document.getElementById('children-container');
             const totalBalanceEl = document.getElementById('total-balance');
             const totalItemsEl = document.getElementById('total-items');
             const totalItemsRoEl = document.getElementById('total-items-ro');
 
-            // 1. Role Based Visibility
-            const adminOnlyElements = [
-                'btn-settings', 
-                'btn-add-child', 
-                'card-store-manager'
-            ];
-            
+            // Visibility
+            const adminOnlyElements = ['btn-settings', 'btn-add-child', 'card-store-manager'];
             adminOnlyElements.forEach(id => {
                 const el = document.getElementById(id);
                 if (isAdmin()) el.classList.remove('hidden-force');
                 else el.classList.add('hidden-force');
             });
-
-            // Toggle Readonly Store Card
             const roCard = document.getElementById('card-store-readonly');
             if (!isAdmin()) roCard.classList.remove('hidden-force');
             else roCard.classList.add('hidden-force');
 
-
-            // 2. Data Rendering
+            // Totals
             const total = state.children.reduce((acc, c) => acc + c.balance, 0);
             totalBalanceEl.innerText = total;
             totalItemsEl.innerText = state.items.length;
             totalItemsRoEl.innerText = state.items.length;
 
             if (state.children.length === 0) {
-                container.innerHTML = `
-                <div class="col-span-full py-16 text-center glass-panel rounded-2xl fade-in">
-                    <div class="inline-block p-4 rounded-full bg-white/20 mb-3">
-                        <i data-lucide="users" class="w-8 h-8 text-slate-400"></i>
-                    </div>
-                    <p class="text-slate-500 font-light text-sm">No children added yet.</p>
-                </div>`;
+                container.innerHTML = `<div class="col-span-full py-16 text-center glass-panel rounded-2xl fade-in"><p class="text-slate-500 text-sm">No children added yet.</p></div>`;
             } else {
                 container.innerHTML = state.children.map(child => {
                     const isBad = child.status === 'bad';
-                    
-                    // Button Visibility based on Roles
+                    const isPaused = child.isPaused;
+
                     const showAdjust = canAdjust() ? '' : 'hidden-force';
                     const showLogBad = canAdjust() ? '' : 'hidden-force';
-                    const showSpend = isAdmin() ? '' : 'hidden-force'; // Only Elijah can spend/buy
+                    const showSpend = isAdmin() ? '' : 'hidden-force';
                     const showDelete = isAdmin() ? 'opacity-0 hover:opacity-100' : 'hidden-force';
 
                     return `
                     <div class="glass-panel rounded-3xl p-6 relative flex flex-col justify-between overflow-hidden transition-all hover:bg-white/40 ${isBad ? 'glass-bad-active' : ''} fade-in">
                         
-                        ${!isBad ? `<div class="absolute top-0 left-0 h-[2px] w-full bg-white/20"><div id="progress-${child.id}" class="h-full bg-slate-400/50 transition-all duration-1000" style="width:0%"></div></div>` : ''}
+                        ${(!isBad && !isPaused) ? `<div class="absolute top-0 left-0 h-[2px] w-full bg-white/20"><div id="progress-${child.id}" class="h-full bg-green-400/50 transition-all duration-1000" style="width:0%"></div></div>` : ''}
 
-                        <div class="flex justify-between items-start mb-6">
+                        <div class="flex justify-between items-start mb-2">
                             <div>
-                                <h3 class="text-xl font-medium text-slate-800 tracking-tight">${child.name}</h3>
-                                ${isBad 
-                                    ? `<span class="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-red-500 mt-1"><i data-lucide="lock" class="w-3 h-3"></i> Paused</span>`
-                                    : `<span class="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-green-600 mt-1"><i data-lucide="check" class="w-3 h-3"></i> Active</span>`
-                                }
+                                <h3 class="text-xl font-medium text-slate-800 tracking-tight flex items-center gap-2">
+                                    ${child.name}
+                                    <button onclick="openHistory('${child.id}')" class="text-slate-300 hover:text-slate-500"><i data-lucide="history" class="w-4 h-4"></i></button>
+                                </h3>
+                                
+                                <div class="mt-1 flex items-center gap-2">
+                                    ${isBad 
+                                        ? `<span class="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-red-500"><i data-lucide="lock" class="w-3 h-3"></i> Bad Mode</span>`
+                                        : (isPaused 
+                                            ? `<span class="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-orange-400"><i data-lucide="pause-circle" class="w-3 h-3"></i> Paused</span>` 
+                                            : `<span class="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-green-600"><i data-lucide="check" class="w-3 h-3"></i> Earning</span>`
+                                        )
+                                    }
+                                </div>
                             </div>
                             <div class="text-right">
                                 <span class="block text-4xl font-light ${isBad ? 'text-slate-400' : 'text-slate-800'}">${child.balance}</span>
-                                <span class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Bucks</span>
+                                <div class="flex items-center justify-end gap-1 mt-1">
+                                    <i data-lucide="timer" class="w-3 h-3 text-slate-400"></i>
+                                    <span id="pay-timer-${child.id}" class="text-xs font-mono font-bold text-slate-400">...</span>
+                                </div>
                             </div>
                         </div>
-
+                        
+                        <!-- Bad Mode Controls -->
                         ${isBad ? `
-                            <div class="glass-panel rounded-xl p-3 mb-6 text-center border-red-200/30">
-                                <p class="text-[10px] font-bold text-red-400 uppercase tracking-widest mb-1">Time Out</p>
+                            <div class="glass-panel rounded-xl p-3 mb-4 text-center border-red-200/30">
+                                <p class="text-[10px] font-bold text-red-400 uppercase tracking-widest mb-1">Time Out Remaining</p>
                                 <p id="timer-${child.id}" class="text-lg font-mono text-red-500/80 font-medium">...</p>
-                                <button onclick="endBadMode('${child.id}')" class="text-xs text-slate-400 underline mt-2 hover:text-slate-600 ${isAdmin() ? '' : 'hidden-force'}">End Early</button>
+                                <div class="flex justify-center gap-2 mt-2 ${canAdjust() ? '' : 'hidden-force'}">
+                                    <button onclick="extendBadMode('${child.id}')" class="text-[10px] bg-red-100 text-red-600 px-2 py-1 rounded hover:bg-red-200">+10m</button>
+                                    <button onclick="endBadMode('${child.id}')" class="text-[10px] bg-slate-100 text-slate-600 px-2 py-1 rounded hover:bg-slate-200">Clear</button>
+                                </div>
                             </div>
                         ` : ''}
 
-                        <div class="grid grid-cols-3 gap-3 mt-auto">
-                            <button onclick="openAdjustModal('${child.id}')" class="${showAdjust} glass-btn flex flex-col items-center justify-center py-3 rounded-xl">
+                        <!-- Action Grid -->
+                        <div class="grid grid-cols-4 gap-2 mt-auto">
+                            <button onclick="openAdjustModal('${child.id}')" class="${showAdjust} glass-btn flex flex-col items-center justify-center py-3 rounded-xl col-span-1">
                                 <i data-lucide="sliders-horizontal" class="w-4 h-4 mb-1 opacity-70"></i>
-                                <span class="text-[10px] font-semibold uppercase tracking-wide">Adjust</span>
+                                <span class="text-[10px] font-semibold uppercase">Adj</span>
                             </button>
-                            <button onclick="openBadModal('${child.id}')" ${isBad ? 'disabled' : ''} class="${showLogBad} glass-btn flex flex-col items-center justify-center py-3 rounded-xl ${isBad ? '' : 'hover:text-red-500'}">
+                            
+                            <!-- Toggle Pause (Only if not bad) -->
+                            <button onclick="togglePause('${child.id}')" ${isBad ? 'disabled' : ''} class="${showAdjust} glass-btn flex flex-col items-center justify-center py-3 rounded-xl col-span-1 ${isPaused ? 'bg-orange-50 border-orange-200 text-orange-500' : ''}">
+                                <i data-lucide="${isPaused ? 'play' : 'pause'}" class="w-4 h-4 mb-1 opacity-70"></i>
+                                <span class="text-[10px] font-semibold uppercase">${isPaused ? 'Resume' : 'Pause'}</span>
+                            </button>
+
+                            <button onclick="openBadModal('${child.id}')" ${isBad ? 'disabled' : ''} class="${showLogBad} glass-btn flex flex-col items-center justify-center py-3 rounded-xl col-span-1 ${isBad ? '' : 'hover:text-red-500'}">
                                 <i data-lucide="frown" class="w-4 h-4 mb-1 opacity-70"></i>
-                                <span class="text-[10px] font-semibold uppercase tracking-wide">Log Bad</span>
+                                <span class="text-[10px] font-semibold uppercase">Bad</span>
                             </button>
-                            <button onclick="openShopModal('${child.id}')" ${isBad ? 'disabled' : ''} class="${showSpend} glass-btn flex flex-col items-center justify-center py-3 rounded-xl ${isBad ? '' : 'hover:text-blue-500'}">
+
+                            <button onclick="openShopModal('${child.id}')" ${isBad ? 'disabled' : ''} class="${showSpend} glass-btn flex flex-col items-center justify-center py-3 rounded-xl col-span-1 ${isBad ? '' : 'hover:text-blue-500'}">
                                 <i data-lucide="shopping-bag" class="w-4 h-4 mb-1 opacity-70"></i>
-                                <span class="text-[10px] font-semibold uppercase tracking-wide">Spend</span>
+                                <span class="text-[10px] font-semibold uppercase">Shop</span>
                             </button>
                         </div>
                         
@@ -645,7 +735,11 @@
                 }).join('');
             }
 
-            // Preview Store Items
+            renderStorePreview();
+            lucide.createIcons();
+        }
+
+        function renderStorePreview() {
             const storePreview = document.getElementById('store-preview-container');
             if(state.items.length === 0) {
                 storePreview.innerHTML = '<p class="text-slate-400 font-light text-sm col-span-3 text-center py-4">Store is empty.</p>';
@@ -660,32 +754,39 @@
                     </div>
                 `).join('');
             }
-
-            lucide.createIcons();
+        }
+        
+        // --- History Logic ---
+        function openHistory(childId) {
+            const child = state.children.find(c => c.id === childId);
+            if(!child) return;
+            
+            const list = document.getElementById('history-list');
+            // Filter logs for this child or global events if needed
+            const childLogs = state.logs.filter(l => l.child === child.name);
+            
+            if(childLogs.length === 0) {
+                list.innerHTML = `<p class="text-center text-slate-400 text-sm">No history yet.</p>`;
+            } else {
+                list.innerHTML = childLogs.map(log => {
+                    const date = new Date(log.date);
+                    return `
+                    <div class="glass-panel p-3 rounded-xl">
+                        <div class="flex justify-between items-start">
+                            <span class="text-xs font-bold text-slate-400 uppercase">${date.toLocaleDateString()} ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                            <span class="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">${log.user}</span>
+                        </div>
+                        <p class="font-medium text-slate-700 mt-1">${log.action}</p>
+                        <p class="text-sm text-slate-500">${log.details}</p>
+                    </div>
+                    `;
+                }).join('');
+            }
+            
+            openModal('modal-history');
         }
 
-        // --- Helper Fns ---
-        function updateCountdowns() {
-            const now = Date.now();
-            state.children.forEach(child => {
-                if (child.status === 'bad') {
-                    const el = document.getElementById(`timer-${child.id}`);
-                    if (el) {
-                        const remaining = Math.max(0, Math.ceil((child.badUntil - now) / 1000));
-                        const m = Math.floor(remaining / 60);
-                        const s = remaining % 60;
-                        el.innerText = `${m}m ${s}s`;
-                    }
-                } else {
-                    const bar = document.getElementById(`progress-${child.id}`);
-                    if (bar) {
-                        const pct = Math.min(100, (child.earningProgress / 3600000) * 100);
-                        bar.style.width = `${pct}%`;
-                    }
-                }
-            });
-        }
-
+        // --- Store Actions ---
         function renderStoreManagerList() {
             const list = document.getElementById('manager-items-list');
             list.innerHTML = state.items.map(item => `
@@ -730,29 +831,37 @@
             lucide.createIcons();
         }
 
-
-        // --- Actions (Window Scoped) ---
+        // --- Window Actions ---
 
         function addChild() {
-            const nameInput = document.getElementById('new-child-name');
-            const name = nameInput.value.trim();
+            const name = document.getElementById('new-child-name').value.trim();
             if (!name) return;
-            state.children.push({ id: crypto.randomUUID(), name, balance: 0, status: 'good', badUntil: null, earningProgress: 0 });
+            state.children.push({ id: crypto.randomUUID(), name, balance: 0, status: 'good', isPaused: false, badUntil: null, earningProgress: 0 });
             saveData(); 
-            nameInput.value = ''; 
+            document.getElementById('new-child-name').value = ''; 
             closeModal('modal-add-child'); 
             showToast(`${name} added!`);
-            logToDiscord(`👶 **New Sibling:** ${name} was added by ${currentUser.name}.`);
+            addLog(name, 'Added', 'New child created');
             render();
         }
 
         function deleteChild(id) {
             if(confirm("Remove this child?")) { 
                 const child = state.children.find(c => c.id === id);
-                logToDiscord(`🗑️ **Deleted:** ${child ? child.name : 'Unknown'} was removed by ${currentUser.name}.`);
+                addLog(child.name, 'Deleted', 'Child removed from system');
                 state.children = state.children.filter(c => c.id !== id); 
                 saveData(); 
                 render();
+            }
+        }
+        
+        function togglePause(id) {
+            const child = state.children.find(c => c.id === id);
+            if(child) {
+                child.isPaused = !child.isPaused;
+                saveData();
+                render();
+                addLog(child.name, child.isPaused ? 'Paused' : 'Resumed', 'Manual earning toggle');
             }
         }
 
@@ -767,7 +876,6 @@
             render();
             document.getElementById('new-item-name').value = ''; 
             document.getElementById('new-item-cost').value = '';
-            // No log for adding items, maybe minor
         }
 
         function deleteStoreItem(id) {
@@ -786,7 +894,7 @@
                     saveData(); 
                     closeModal('modal-shop'); 
                     showToast(`${item.name} purchased!`);
-                    logToDiscord(`🛍️ **Purchase:** ${child.name} bought **${item.name}** for ${item.cost} Bucks.`);
+                    addLog(child.name, 'Purchase', `Bought ${item.name} for ${item.cost}`);
                     render();
                 }
             }
@@ -796,11 +904,8 @@
         function setBadTime(mins) {
             selectedBadDuration = mins;
             document.querySelectorAll('.time-btn').forEach(btn => {
-                if(btn.innerText.includes(mins)) {
-                    btn.classList.add('bg-white/60', 'text-slate-800', 'border-white');
-                } else {
-                    btn.classList.remove('bg-white/60', 'text-slate-800', 'border-white');
-                }
+                if(btn.innerText.includes(mins)) btn.classList.add('bg-white/60', 'text-slate-800', 'border-white');
+                else btn.classList.remove('bg-white/60', 'text-slate-800', 'border-white');
             });
         }
 
@@ -813,7 +918,7 @@
                 saveData(); 
                 closeModal('modal-bad'); 
                 showToast(`${child.name} paused.`);
-                logToDiscord(`🛑 **Action Logged:** ${child.name} put in bad mode for ${selectedBadDuration}m by ${currentUser.name}.`);
+                addLog(child.name, 'Bad Mode', `Set for ${selectedBadDuration}m`);
                 render();
             }
         }
@@ -823,14 +928,26 @@
                 const child = state.children.find(c => c.id === id);
                 child.status = 'good'; child.badUntil = null; 
                 saveData(); 
-                logToDiscord(`🔓 **Forgiven:** ${child.name}'s bad mode was ended early by ${currentUser.name}.`);
+                addLog(child.name, 'Forgiven', 'Bad mode ended manually');
                 render();
+            }
+        }
+        
+        function extendBadMode(id) {
+            const child = state.children.find(c => c.id === id);
+            if(child && child.status === 'bad') {
+                child.badUntil += (10 * 60000); // Add 10 mins
+                saveData();
+                render();
+                addLog(child.name, 'Extended', 'Added 10 minutes to Bad Mode');
+                showToast("Added 10 mins.");
             }
         }
 
         let adjustAmount = 0;
         function openAdjustModal(id) {
             document.getElementById('adjust-child-id').value = id;
+            document.getElementById('adjust-reason').value = ''; // Clear reason
             adjustAmount = 0; 
             updateAdjustDisplay(); 
             openModal('modal-adjust');
@@ -842,22 +959,35 @@
             el.innerText = (adjustAmount > 0 ? '+' : '') + adjustAmount;
             el.className = `text-4xl font-light w-24 text-center ${adjustAmount > 0 ? 'text-green-600' : (adjustAmount < 0 ? 'text-red-500' : 'text-slate-700')}`;
         }
+        
         function confirmAdjust() {
             const id = document.getElementById('adjust-child-id').value;
+            const reason = document.getElementById('adjust-reason').value.trim() || 'No reason provided';
             const child = state.children.find(c => c.id === id);
+            
             if(child && adjustAmount !== 0) { 
                 child.balance += adjustAmount; 
                 saveData(); 
                 showToast(`Updated.`); 
-                logToDiscord(`⚖️ **Adjust:** ${child.name}'s balance changed by ${adjustAmount} (New: ${child.balance}) by ${currentUser.name}.`);
+                addLog(child.name, 'Adjustment', `${adjustAmount > 0 ? '+' : ''}${adjustAmount} (Reason: ${reason})`);
                 render();
             }
             closeModal('modal-adjust');
         }
         
+        function updateRate() {
+            const rate = parseInt(document.getElementById('setting-rate').value);
+            if(rate > 0) {
+                state.hourlyRate = rate;
+                saveData();
+                showToast(`Rate set to ${rate}/hr`);
+                addLog('System', 'Settings', `Hourly rate changed to ${rate}`);
+            }
+        }
+
         function resetAllData() {
             if(confirm("Are you sure? This deletes all children and history.")) {
-                state = { children: [], items: [], lastSaved: Date.now() };
+                state = { children: [], items: [], logs: [], hourlyRate: 10, lastSaved: Date.now() };
                 saveData();
                 closeModal('modal-settings');
                 showToast("All data reset.");
@@ -880,11 +1010,17 @@
             el.querySelector('div').classList.add('scale-95');
         }
 
-        function openAddChildModal() { openModal('modal-add-child'); document.getElementById('new-child-name').focus(); }
-        function openBadModal(id) { document.getElementById('bad-child-id').value = id; setBadTime(15); openModal('modal-bad'); }
-        function openShopModal(id) { renderShopGrid(id); openModal('modal-shop'); }
-        function openStoreManager() { renderStoreManagerList(); openModal('modal-store-manager'); }
-        function openSettings() { openModal('modal-settings'); }
+        // Added missing function definition
+        function openAddChildModal() { 
+            openModal('modal-add-child'); 
+            document.getElementById('new-child-name').focus(); 
+        }
+
+        window.openAddChildModal = openAddChildModal;
+        window.openBadModal = function(id) { document.getElementById('bad-child-id').value = id; setBadTime(15); openModal('modal-bad'); }
+        window.openShopModal = function(id) { renderShopGrid(id); openModal('modal-shop'); }
+        window.openStoreManager = function() { renderStoreManagerList(); openModal('modal-store-manager'); }
+        window.openSettings = function() { openModal('modal-settings'); }
         
         function showToast(msg) {
             const t = document.getElementById('toast');
@@ -893,7 +1029,6 @@
             setTimeout(() => t.classList.add('opacity-0', 'translate-y-4'), 3000);
         }
 
-        // Initialize App
         window.addEventListener('DOMContentLoaded', init);
 
     </script>
