@@ -473,14 +473,14 @@
         }
 
         // --- Logging & Undo ---
-        function addLog(childName, action, details, undoData = null) {
+        function addLog(childName, action, details, undoData = null, overrideUser = null) {
             const entry = {
                 id: crypto.randomUUID(),
                 date: Date.now(),
                 child: childName,
                 action: action,
                 details: details,
-                user: currentUser ? currentUser.name : 'System',
+                user: overrideUser || (currentUser ? currentUser.name : 'System'),
                 undoData: undoData
             };
             state.logs.unshift(entry); // Add to top
@@ -649,7 +649,7 @@
                                 child.status = 'good';
                                 child.badUntil = null;
                                 showToast(`${child.name} is back in Good Mode!`);
-                                addLog(child.name, 'Status', 'Returned to Good Mode');
+                                addLog(child.name, 'Status', 'Returned to Good Mode', null, 'System');
                                 needsRender = true;
                             }
                         } else if (child.status === 'good') {
@@ -662,6 +662,7 @@
                                 child.balance += state.hourlyRate;
                                 child.earningProgress -= ONE_HOUR_MS;
                                 showToast(`${child.name} earned ${state.hourlyRate} Bucks!`);
+                                addLog(child.name, 'Auto Earning', `+${state.hourlyRate} Bucks (Hourly Reward)`, null, 'System');
                                 needsRender = true;
                             }
                         }
@@ -675,6 +676,64 @@
                 updateTimers(); // Visual update for sub-second/second changes
                 if (needsRender) render();
             }
+        }
+        
+        // --- Process Offline Logic (Startup) ---
+        // This runs once when app starts to catch up on time closed
+        function processOfflineTime() {
+            const now = Date.now();
+            const lastSaved = state.lastSaved || now;
+            let elapsed = now - lastSaved;
+            
+            // Only process if it's been more than a few seconds (avoid jitter)
+            if (elapsed < 1000) return;
+
+            state.children.forEach(child => {
+                if (!child.earningProgress) child.earningProgress = 0;
+                
+                // Activities handling (deduct time if not paused)
+                if (child.activities) {
+                    child.activities.forEach(act => {
+                        if(!act.isPaused) act.timeLeft = Math.max(0, act.timeLeft - elapsed);
+                    });
+                    child.activities = child.activities.filter(a => a.timeLeft > 0);
+                }
+
+                if (child.isPaused) return;
+
+                if (child.status === 'bad' && child.badUntil) {
+                    if (child.badUntil <= now) {
+                        // Expired while closed
+                        // We assume earning started AFTER bad mode ended
+                        const timeInGood = now - child.badUntil;
+                        child.status = 'good';
+                        child.badUntil = null;
+                        addLog(child.name, 'Status', 'Returned to Good Mode (While Away)', null, 'System');
+                        
+                        if (timeInGood > 0) child.earningProgress += timeInGood;
+                    }
+                } else {
+                    // Was good, add full time
+                    child.earningProgress += elapsed;
+                }
+
+                const ONE_HOUR_MS = 3600000;
+                let earningsCount = 0;
+                while (child.earningProgress >= ONE_HOUR_MS) {
+                    child.balance += state.hourlyRate;
+                    child.earningProgress -= ONE_HOUR_MS;
+                    earningsCount++;
+                }
+                
+                if(earningsCount > 0) {
+                    const totalEarned = earningsCount * state.hourlyRate;
+                    // Log aggregated offline earnings
+                    addLog(child.name, 'Offline Earning', `+${totalEarned} Bucks (${earningsCount} hrs while away)`, null, 'System');
+                }
+            });
+            
+            state.lastSaved = now;
+            saveData();
         }
 
         // --- Activity Logic ---
